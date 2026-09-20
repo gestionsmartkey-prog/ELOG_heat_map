@@ -10,7 +10,7 @@ type Props = {
   onClear: () => void;
 };
 
-/** Right-hand panel: empty prompt, hex summary grouped by door, or one seller's detail. */
+/** Panel derecho: vacío, resumen del hexágono agrupado por domicilio, o detalle de un seller. */
 export function Panel({ cell, catchmentValue, catchmentK, metricShort, onClear }: Props) {
   const [selected, setSelected] = useState<MapSeller | null>(null);
 
@@ -19,7 +19,7 @@ export function Panel({ cell, catchmentValue, catchmentK, metricShort, onClear }
     const byLoc = new Map<string, { address: string; locality: string | null; sellers: MapSeller[] }>();
     for (const s of cell.sellers) {
       const key = s.location_id ?? s.id;
-      const g = byLoc.get(key) ?? { address: s.address_display ?? "Unknown address", locality: s.locality, sellers: [] };
+      const g = byLoc.get(key) ?? { address: s.address_display ?? "Sin domicilio", locality: s.locality, sellers: [] };
       g.sellers.push(s);
       byLoc.set(key, g);
     }
@@ -35,9 +35,9 @@ export function Panel({ cell, catchmentValue, catchmentK, metricShort, onClear }
 
   if (!cell) {
     return (
-      <aside className="flex h-full flex-col p-5 text-sm text-slate-600" data-testid="panel-empty">
-        <p className="font-medium text-slate-800">Select an area to see its sellers.</p>
-        <p className="mt-2">Hover a hex for its count. Zoom in for finer hexes and individual doors.</p>
+      <aside className="flex h-full flex-col p-6" data-testid="panel-empty">
+        <p className="t-h3 text-carbon">Seleccioná un área para ver sus sellers.</p>
+        <p className="mt-2 text-gris-700">Pasá el mouse por un hexágono para ver la cantidad. Acercá el mapa para hexágonos más finos y domicilios individuales.</p>
       </aside>
     );
   }
@@ -45,51 +45,51 @@ export function Panel({ cell, catchmentValue, catchmentK, metricShort, onClear }
   if (selected && cell.sellers.includes(selected)) {
     const s = selected;
     return (
-      <aside className="flex h-full flex-col overflow-y-auto p-5 text-sm" data-testid="panel-seller">
-        <button onClick={() => setSelected(null)} className="mb-3 self-start text-xs text-slate-500 hover:text-slate-800">← Back to list</button>
-        <h2 className="text-base font-semibold text-slate-900">{s.name}</h2>
-        <p className="text-xs text-slate-500">{s.kind_label} · id {s.external_id}</p>
-        <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
-          <dt className="text-slate-500">Address</dt><dd>{s.address_display ?? "—"}</dd>
-          <dt className="text-slate-500">Locality</dt><dd>{[s.locality, s.partido].filter(Boolean).join(" · ") || "—"}</dd>
-          <dt className="text-slate-500">Province</dt><dd>{s.province ?? "—"}{s.postal_code ? ` · CP ${s.postal_code}` : ""}</dd>
-          {s.opening_hours ? <><dt className="text-slate-500">Hours</dt><dd>{s.opening_hours}</dd></> : null}
-          {s.note_address ? <><dt className="text-amber-700">Note says</dt><dd className="text-amber-700">{s.note_address} (differs from registered address)</dd></> : null}
-          <dt className="text-slate-500">Geocode</dt><dd>{s.geocode_status ?? "—"}</dd>
-          <dt className="text-slate-500">Volume</dt><dd className="text-slate-400">phase 2</dd>
+      <aside className="flex h-full flex-col overflow-y-auto p-6" data-testid="panel-seller">
+        <button onClick={() => setSelected(null)} className="mb-4 self-start text-tostado hover:underline">← Volver a la lista</button>
+        <h2 className="t-h3 text-carbon">{s.name}</h2>
+        <p className="mt-1 text-gris-700">{s.kind_label} · id {s.external_id}</p>
+        <dl className="mt-6 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
+          <dt className="text-gris-700">Domicilio</dt><dd>{s.address_display ?? "—"}</dd>
+          <dt className="text-gris-700">Localidad</dt><dd>{[s.locality, s.partido].filter(Boolean).join(" · ") || "—"}</dd>
+          <dt className="text-gris-700">Provincia</dt><dd>{s.province ?? "—"}{s.postal_code ? ` · CP ${s.postal_code}` : ""}</dd>
+          {s.opening_hours ? <><dt className="text-gris-700">Horario</dt><dd>{s.opening_hours}</dd></> : null}
+          {s.note_address ? <><dt className="text-ambar">Nota</dt><dd className="text-ambar">Indica {s.note_address}, distinto del domicilio registrado.</dd></> : null}
+          <dt className="text-gris-700">Geocodificación</dt><dd>{geocodeLabel(s.geocode_status)}</dd>
+          <dt className="text-gris-700">Volumen</dt><dd className="text-gris-400">fase 2</dd>
         </dl>
       </aside>
     );
   }
 
   return (
-    <aside className="flex h-full flex-col overflow-hidden text-sm" data-testid="panel-cell">
-      <div className="border-b border-slate-200 p-5">
+    <aside className="flex h-full flex-col overflow-hidden" data-testid="panel-cell">
+      <div className="border-b border-gris-200 p-6">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">{localities || "Selected area"}</h2>
-            <p className="text-xs text-slate-500">hex {cell.cell}</p>
+            <h2 className="t-h3 text-carbon">{localities || "Área seleccionada"}</h2>
+            <p className="mt-0.5 text-gris-700 tnum">hexágono {cell.cell}</p>
           </div>
-          <button onClick={onClear} className="text-xs text-slate-500 hover:text-slate-800">Clear</button>
+          <button onClick={onClear} className="text-tostado hover:underline">Limpiar</button>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="mt-4 grid grid-cols-3 gap-2">
           <Stat label={metricShort} value={cell.value} />
-          <Stat label="doors" value={groups.length} />
-          <Stat label={catchmentK ? `${metricShort} in +${catchmentK}` : "catchment"} value={catchmentK ? catchmentValue ?? 0 : null} />
+          <Stat label="domicilios" value={groups.length} />
+          <Stat label={catchmentK ? `${metricShort} en +${catchmentK}` : "alcance"} value={catchmentK ? catchmentValue ?? 0 : null} />
         </div>
       </div>
-      <ul className="flex-1 overflow-y-auto divide-y divide-slate-100" data-testid="door-list">
+      <ul className="flex-1 divide-y divide-gris-200 overflow-y-auto" data-testid="door-list">
         {groups.map((g) => (
-          <li key={g.address + g.locality} className="px-5 py-3">
-            <p className="font-medium text-slate-800">{g.address} <span className="text-xs font-normal text-slate-400">{g.locality ?? ""}</span></p>
-            <p className="text-xs text-slate-500">{g.sellers.length === 1 ? "1 seller" : `${g.sellers.length} sellers, 1 door`}</p>
-            <ul className="mt-1.5 space-y-1">
+          <li key={g.address + g.locality} className="px-6 py-4">
+            <p className="font-medium text-carbon">{g.address} <span className="font-normal text-gris-700">{g.locality ?? ""}</span></p>
+            <p className="text-gris-700">{g.sellers.length === 1 ? "1 seller" : `${g.sellers.length} sellers, 1 domicilio`}</p>
+            <ul className="mt-2 space-y-1">
               {g.sellers.map((s) => (
                 <li key={s.id}>
-                  <button onClick={() => setSelected(s)} className="w-full rounded px-2 py-1 text-left hover:bg-slate-100">
+                  <button onClick={() => setSelected(s)} className="w-full rounded-[8px] px-2 py-1 text-left hover:bg-papel">
                     <span className="mr-2 inline-block h-2 w-2 rounded-full" style={{ background: kindColor(s.kind) }} />
                     {s.name}
-                    <span className="ml-2 text-xs text-slate-400">{s.kind_label}</span>
+                    <span className="ml-2 text-gris-700">{s.kind_label}</span>
                   </button>
                 </li>
               ))}
@@ -103,13 +103,24 @@ export function Panel({ cell, catchmentValue, catchmentK, metricShort, onClear }
 
 function Stat({ label, value }: { label: string; value: number | null }) {
   return (
-    <div className="rounded-md bg-slate-50 px-3 py-2">
-      <div className="text-lg font-semibold tabular-nums text-slate-900">{value ?? "—"}</div>
-      <div className="text-[11px] uppercase tracking-wide text-slate-500">{label}</div>
+    <div className="rounded-[8px] bg-papel px-3 py-2">
+      <div className="t-display text-[28px] text-carbon tnum">{value ?? "—"}</div>
+      <div className="t-etiqueta mt-1 text-gris-700">{label}</div>
     </div>
   );
 }
 
+function geocodeLabel(s: string | null): string {
+  switch (s) {
+    case "ok": return "ubicado";
+    case "review": return "a revisar";
+    case "failed": return "sin ubicar";
+    case "pending": return "pendiente";
+    default: return "—";
+  }
+}
+
+/** Colores por tipo: naranja de marca para sellers; semánticos del manual para el resto. */
 export function kindColor(kind: string): string {
-  return kind === "dropoff_agency" ? "#2b8cbe" : kind === "partner" ? "#7a0177" : kind === "unknown" ? "#737373" : "#d7301f";
+  return kind === "dropoff_agency" ? "#2B6E8F" : kind === "partner" ? "#2E7D5B" : kind === "unknown" ? "#A3A09E" : "#FF9038";
 }

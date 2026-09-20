@@ -16,6 +16,8 @@
     "export:fixture": "tsx scripts/export-fixture.ts"
   },
   "dependencies": {
+    "@fontsource/montserrat": "^5.3.0",
+    "@fontsource/montserrat-alternates": "^5.3.0",
     "@supabase/supabase-js": "^2.116.0",
     "h3-js": "^4.5.0",
     "jose": "^6.2.12",

@@ -9,7 +9,7 @@ import { TopBar } from "./TopBar";
 import { Panel } from "./Panel";
 
 // MapLibre touches window at import time, so the map is client-only.
-const MapView = dynamic(() => import("./MapView").then((m) => m.MapView), { ssr: false, loading: () => <div className="flex h-full items-center justify-center text-sm text-slate-500">Loading map…</div> });
+const MapView = dynamic(() => import("./MapView").then((m) => m.MapView), { ssr: false, loading: () => <div className="flex h-full items-center justify-center text-gris-700">Cargando mapa…</div> });
 
 export function HeatMapApp() {
   const [data, setData] = useState<SellersResponse | null>(null);
@@ -46,12 +46,12 @@ export function HeatMapApp() {
       <div className="flex min-h-0 flex-1">
         <div className="relative min-w-0 flex-[7]">
           {error ? (
-            <div className="flex h-full items-center justify-center p-6 text-sm text-red-700">Could not load sellers: {error}</div>
+            <div className="flex h-full items-center justify-center p-6 text-rojo">No se pudieron cargar los sellers: {error}</div>
           ) : (
             <MapView sellers={visible} metric={metric} catchmentK={catchmentK} selectedCell={selected?.cell.cell ?? null} onSelect={onSelect} onResolution={setRes} />
           )}
         </div>
-        <div className="w-[30%] min-w-[300px] max-w-[440px] border-l border-slate-200 bg-white">
+        <div className="w-[30%] min-w-[300px] max-w-[440px] border-l border-gris-200 bg-white">
           <Panel cell={selected?.cell ?? null} catchmentValue={selected?.catchmentValue ?? null} catchmentK={catchmentK} metricShort={metric.short} onClear={() => setSelected(null)} />
         </div>
       </div>

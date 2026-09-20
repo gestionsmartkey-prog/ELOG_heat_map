@@ -43,8 +43,8 @@ export function catchment(cell: string, agg: Map<string, CellAgg>, metric: Metri
 
 export type Bin = { min: number; max: number; color: string; label: string };
 
-// Sequential palette (YlOrRd, 6 steps) — pale for few, saturated for many.
-const PALETTE = ["#ffffb2", "#fed976", "#feb24c", "#fd8d3c", "#f03b20", "#bd0026"];
+// Rampa secuencial de marca: del Papel al Naranja ELOG y al Naranja Tostado. Pálido = pocos, saturado = muchos.
+const PALETTE = ["#F5E3D3", "#FFC48F", "#FF9038", "#E86A1F", "#C13E06", "#8A2B04"];
 
 /**
  * Class breaks that survive skewed, small-N data. Quantile breaks on the
@@ -78,7 +78,7 @@ export function computeBins(values: number[]): Bin[] {
 
 export function colorFor(value: number, bins: Bin[]): string {
   for (const b of bins) if (value >= b.min && value <= b.max) return b.color;
-  return bins.length ? bins[bins.length - 1].color : "#cccccc";
+  return bins.length ? bins[bins.length - 1].color : "#E3DFDB";
 }
 
 /** GeoJSON for MapLibre: one polygon per populated cell with value and colour baked in. */

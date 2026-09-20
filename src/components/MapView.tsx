@@ -14,7 +14,7 @@ const BASEMAP = process.env.NEXT_PUBLIC_BASEMAP_STYLE ?? "https://basemaps.carto
 const BLANK_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {},
-  layers: [{ id: "bg", type: "background", paint: { "background-color": "#e9eef3" } }],
+  layers: [{ id: "bg", type: "background", paint: { "background-color": "#E3DFDB" } }],
 };
 /** Fetch the basemap style ourselves so an unreachable CDN degrades to a blank canvas instead of a half-loaded map. */
 async function resolveStyle(): Promise<maplibregl.StyleSpecification | string> {
@@ -96,13 +96,13 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
           id: "hex-fill", type: "fill", source: "hexes",
           paint: {
             "fill-color": ["get", "color"],
-            "fill-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.85, 0.62],
+            "fill-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.9, 0.7],
           },
         });
         m.addLayer({
           id: "hex-line", type: "line", source: "hexes",
           paint: {
-            "line-color": ["case", ["boolean", ["feature-state", "selected"], false], "#0f172a", "#ffffff"],
+            "line-color": ["case", ["boolean", ["feature-state", "selected"], false], "#2A2726", "#FFFFFF"],
             "line-width": ["case", ["boolean", ["feature-state", "selected"], false], 2.5, 0.8],
           },
         });
@@ -110,8 +110,9 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
           id: "points", type: "circle", source: "points", minzoom: 13.5,
           paint: {
             "circle-radius": 5,
-            "circle-color": ["match", ["get", "kind"], "dropoff_agency", "#2b8cbe", "partner", "#7a0177", "#d7301f"],
-            "circle-stroke-color": "#fff", "circle-stroke-width": 1.5,
+            "circle-color": ["match", ["get", "kind"], "dropoff_agency", "#2B6E8F", "partner", "#2E7D5B", "unknown", "#A3A09E", "#FF9038"],
+            "circle-stroke-color": "#3F3E3E",
+            "circle-stroke-width": 1.5,
           },
         });
         setReady(true);
@@ -130,7 +131,7 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
         const cellAgg = a.get(cell);
         if (!cellAgg) return;
         const ring = k > 0 ? catchment(cell, a, met, k) : null;
-        const html = `<strong>${met.format(cellAgg.value)}</strong> ${met.short}` + (ring != null ? `<br/><span style="color:#64748b">${met.format(ring)} within ${k} ring${k > 1 ? "s" : ""}</span>` : "");
+        const html = `<strong>${met.format(cellAgg.value)}</strong> ${met.short}` + (ring != null ? `<br/><span style="color:#606060">${met.format(ring)} en +${k} anillo${k > 1 ? "s" : ""}</span>` : "");
         if (!popupRef.current) popupRef.current = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
         popupRef.current.setLngLat(e.lngLat).setHTML(html).addTo(m);
       });
@@ -179,7 +180,7 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
         if (placed.some((b) => box.x < b.x + b.w + 4 && box.x + box.w + 4 > b.x && box.y < b.y + b.h + 2 && box.y + box.h + 2 > b.y)) continue;
         placed.push(box);
         const el = document.createElement("div");
-        el.className = "pointer-events-none select-none whitespace-nowrap rounded bg-white/85 px-1.5 py-0.5 text-[11px] font-medium text-slate-800 shadow-sm";
+        el.className = "pointer-events-none select-none whitespace-nowrap rounded-[4px] bg-white/90 px-1.5 py-0.5 text-[11px] font-medium text-carbon tnum shadow-[0_1px_3px_rgba(42,39,38,0.15)]";
         el.textContent = text;
         markersRef.current.push(new maplibregl.Marker({ element: el, anchor: "bottom", offset: [0, -6] }).setLngLat([l.lng, l.lat]).addTo(map));
       }
@@ -215,8 +216,8 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
       <div className="pointer-events-none absolute bottom-6 left-3 z-10">
         <Legend bins={bins} metricShort={metric.short} res={res} />
       </div>
-      <button onClick={fitAll} className="absolute right-3 top-3 z-10 rounded-md border border-slate-300 bg-white/95 px-2 py-1 text-xs shadow hover:bg-white" title="Fit to data">
-        Fit to data
+      <button onClick={fitAll} className="btn btn-light absolute right-3 top-3 z-10 text-[13px] shadow-[0_1px_4px_rgba(42,39,38,0.15)]" title="Encuadrar todos los datos">
+        Ver todo
       </button>
     </div>
   );

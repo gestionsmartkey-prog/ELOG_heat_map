@@ -15,15 +15,15 @@ export type Metric = {
 export const METRICS: Metric[] = [
   {
     id: "seller_count",
-    label: "Number of sellers",
+    label: "Cantidad de sellers",
     short: "sellers",
     reduce: (rows) => rows.length,
     format: (v) => String(v),
   },
   {
     id: "location_count",
-    label: "Number of pickup doors",
-    short: "doors",
+    label: "Cantidad de domicilios",
+    short: "domicilios",
     reduce: (rows) => new Set(rows.map((r) => r.location_id ?? r.id)).size,
     format: (v) => String(v),
   },

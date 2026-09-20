@@ -69,7 +69,7 @@ await page.waitForSelector('[data-testid="panel-seller"]');
 await page.screenshot({ path: `${out}/03-seller.png` });
 
 // 6. Toggle agencies on and switch metric — data-driven state must re-render without errors
-await page.locator('[data-testid="kind-filters"] input').nth(1).check();
+await page.locator('[data-testid="kind-filters"] label').nth(1).click();
 await page.selectOption('[data-testid="metric-select"]', "location_count");
 await page.waitForTimeout(500);
 const hexes2 = await page.getAttribute('[data-testid="map"]', "data-hexes");
@@ -86,7 +86,7 @@ console.log("legend at z14:", resLabel?.replace(/\s+/g, " ").slice(0, 60));
 await page.screenshot({ path: `${out}/05-doors.png` });
 
 // 8. Sign out returns to login
-await page.click("text=Sign out");
+await page.click("text=Salir");
 await page.waitForURL(/\/login/);
 
 const real = errors.filter((e) => !/basemaps\.cartocdn|Failed to fetch|net::ERR|AJAXError|style/i.test(e));
