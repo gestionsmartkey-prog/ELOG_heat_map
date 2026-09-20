@@ -7,7 +7,7 @@ import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
  */
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (pathname === "/login" || pathname.startsWith("/api/login")) return NextResponse.next();
+  if (pathname === "/login" || pathname.startsWith("/api/login") || pathname === "/api/health") return NextResponse.next();
 
   const ok = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
   if (ok) return NextResponse.next();
