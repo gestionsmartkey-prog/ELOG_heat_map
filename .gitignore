@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# client data never goes in git
+/data/private/
+/data/out/
+/test-results/
+/playwright-report/
+
+# copied from node_modules at build time (see scripts/copy-maplibre-worker.mjs)
+/public/maplibre/
+
+# generated from the database with `npm run export:fixture`; holds client data
+/data/fixtures/*.json
