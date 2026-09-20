@@ -54,6 +54,7 @@ export function TopBar({ data, metricId, onMetric, enabledKinds, onToggleKind, c
             {latest ? ` · ${latest.filename} (${new Date(latest.created_at).toLocaleDateString()})` : ""}
           </span>
         ) : <span>Loading…</span>}
+        {data?.viewer ? <span className="text-slate-600">{data.viewer}</span> : null}
         <form method="post" action="/api/logout"><button className="rounded-md border border-slate-300 px-2 py-1 hover:bg-slate-50">Sign out</button></form>
       </div>
     </header>

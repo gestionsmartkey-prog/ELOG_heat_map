@@ -109,3 +109,19 @@ describe("runPipeline", () => {
     expect(sql.trim().endsWith("drop function public._ingest_batch();")).toBe(true);
   });
 });
+
+describe("auth credentials", () => {
+  it("parses named users and checks them without leaking the fallback", async () => {
+    const { parseUsers, checkCredentials } = await import("../../src/lib/auth");
+    const users = parseUsers("Alice:pw1, bob:with:colon\n carol : pw3 ");
+    expect([...users.entries()]).toEqual([["alice", "pw1"], ["bob", "with:colon"], ["carol", "pw3"]]);
+    process.env.APP_USERS = "demo:secret";
+    delete process.env.APP_PASSWORD;
+    expect(checkCredentials("Demo", "secret")).toBe("demo");
+    expect(checkCredentials("demo", "wrong")).toBeNull();
+    expect(checkCredentials("ghost", "secret")).toBeNull();
+    process.env.APP_PASSWORD = "shared";
+    expect(checkCredentials("anyone", "shared")).toBe("anyone");
+    expect(checkCredentials("demo", "shared")).toBeNull(); // named user must use their own password
+  });
+});

@@ -9,8 +9,8 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (pathname === "/login" || pathname.startsWith("/api/login") || pathname === "/api/health") return NextResponse.next();
 
-  const ok = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
-  if (ok) return NextResponse.next();
+  const user = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
+  if (user) return NextResponse.next();
 
   if (pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });

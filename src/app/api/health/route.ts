@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase";
+import { hasAnyCredential } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   const env = {
-    APP_PASSWORD: Boolean(process.env.APP_PASSWORD),
+    LOGIN_CREDENTIALS: hasAnyCredential(),
     SESSION_SECRET: Boolean(process.env.SESSION_SECRET && process.env.SESSION_SECRET.length >= 16),
     SUPABASE_URL: Boolean(process.env.SUPABASE_URL),
     SUPABASE_SECRET_KEY: Boolean(process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY),

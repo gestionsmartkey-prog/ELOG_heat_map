@@ -6,6 +6,7 @@ import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 
 const base = process.argv[2] ?? "http://localhost:3000";
+const username = process.env.APP_USER ?? "demo";
 const password = process.env.APP_PASSWORD ?? "demo-password";
 const out = "data/out/shots";
 mkdirSync(out, { recursive: true });
@@ -21,11 +22,13 @@ await page.goto(base + "/");
 if (!page.url().endsWith("/login")) throw new Error("expected redirect to /login, got " + page.url());
 
 // 2. Wrong password stays on login with an error
+await page.fill("#username", username);
 await page.fill("#password", "nope");
 await page.click("button[type=submit]");
 await page.waitForURL(/\/login\?error=1/);
 
 // 3. Right password lands on the map
+await page.fill("#username", username);
 await page.fill("#password", password);
 await page.click("button[type=submit]");
 await page.waitForURL(base + "/");

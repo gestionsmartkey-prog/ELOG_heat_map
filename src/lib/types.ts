@@ -38,4 +38,6 @@ export type SellersResponse = {
   batches: BatchSummary[];
   stats: { total: number; located: number; unlocated: number; open_reviews: number };
   generated_at: string;
+  /** Username from the session cookie; set by the API route, absent in fixtures. */
+  viewer?: string | null;
 };

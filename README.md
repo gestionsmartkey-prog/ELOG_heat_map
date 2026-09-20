@@ -15,7 +15,7 @@ client export (.xlsx/.csv) → ingest pipeline → Supabase → /api/sellers →
 ## Run locally
 
 ```bash
-cp .env.example .env.local   # fill in APP_PASSWORD, SESSION_SECRET, SUPABASE_URL, SUPABASE_SECRET_KEY
+cp .env.example .env.local   # fill in APP_USERS, SESSION_SECRET, SUPABASE_URL, SUPABASE_SECRET_KEY
 npm install
 npm run dev                  # http://localhost:3000
 ```
@@ -49,7 +49,7 @@ PW_CHROMIUM=/path/to/chromium npm run test:e2e   # login gate, map, panel, metri
 
 ## Deploy
 
-Vercel, root of this repo. Environment variables: `APP_PASSWORD`, `SESSION_SECRET`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`. The Supabase secret key never reaches the browser; all reads go through the route handlers behind the session cookie.
+Vercel, root of this repo (`vercel.json` pins the framework, region and security headers). Environment variables: `APP_USERS` (or `APP_PASSWORD`), `SESSION_SECRET`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`. `GET /api/health` is public and reports whether they are set and whether Supabase answers. The Supabase secret key never reaches the browser; all reads go through the route handlers behind the session cookie.
 
 ## Data notes from the first sample
 
