@@ -1,26 +1,80 @@
 @import "tailwindcss";
+@import "maplibre-gl/dist/maplibre-gl.css";
+/* Montserrat (texto, interfaz, datos) + Montserrat Alternates (títulos, etiquetas). SIL OFL, self-hosted. */
+@import "@fontsource/montserrat/400.css";
+@import "@fontsource/montserrat/500.css";
+@import "@fontsource/montserrat/600.css";
+@import "@fontsource/montserrat-alternates/600.css";
+@import "@fontsource/montserrat-alternates/700.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ELOG Group · Manual de marca v1.0 (septiembre 2026) */
+@theme {
+  --color-naranja: #FF9038;   /* acento: superficies, gráficos, elementos grandes. Nunca texto sobre claro */
+  --color-tostado: #C13E06;   /* texto y links naranjas sobre fondo claro (5,30:1) */
+  --color-grafito: #3F3E3E;   /* base */
+  --color-carbon: #2A2726;    /* fondo profundo */
+  --color-papel: #FAF7F4;     /* fondo claro por defecto */
+  --color-gris-700: #606060;  /* texto secundario */
+  --color-gris-400: #A3A09E;  /* bordes, íconos inactivos, ejes */
+  --color-gris-200: #E3DFDB;  /* divisores, fondos de tabla */
+  --color-verde: #2E7D5B;     /* semánticos: solo datos y operación */
+  --color-ambar: #B57C12;
+  --color-rojo: #B23A2C;
+  --color-azul: #2B6E8F;
+
+  --font-sans: "Montserrat", Arial, Helvetica, sans-serif;
+  --font-display: "Montserrat Alternates", "Montserrat", Arial, Helvetica, sans-serif;
+
+  --radius-field: 4px;   /* campos, chips chicos */
+  --radius-button: 8px;  /* botones, tarjetas chicas */
+  --radius-card: 16px;   /* tarjetas, tablas, contenedores */
+  --radius-pill: 999px;  /* píldoras y etiquetas de estado */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html, body { height: 100%; }
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-papel);
+  color: var(--color-carbon);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* Escala tipográfica del manual (base 16, razón 1,25) */
+.t-h3 { font-family: var(--font-sans); font-weight: 600; font-size: 20px; line-height: 1.3; }
+.t-dato { font-family: var(--font-sans); font-weight: 600; font-size: 14px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.t-etiqueta { font-family: var(--font-display); font-weight: 600; font-size: 12px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; }
+.t-display { font-family: var(--font-display); font-weight: 700; line-height: 1.05; }
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* Controles */
+.btn { font-family: var(--font-sans); font-weight: 500; border-radius: var(--radius-button); padding: 6px 12px; line-height: 1.2; }
+.btn-primary { background: var(--color-grafito); color: #fff; }
+.btn-primary:hover { background: var(--color-carbon); }
+.btn-ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,0.35); }
+.btn-ghost:hover { border-color: #fff; }
+.btn-light { background: #fff; color: var(--color-grafito); border: 1px solid var(--color-gris-200); }
+.btn-light:hover { border-color: var(--color-gris-400); }
+.field { font-family: var(--font-sans); border-radius: var(--radius-field); border: 1px solid var(--color-gris-400); background: #fff; color: var(--color-carbon); padding: 8px 10px; }
+.field:focus { outline: none; border-color: var(--color-grafito); box-shadow: 0 0 0 2px rgba(63,62,62,0.15); }
+.select-dark { font-family: var(--font-sans); border-radius: var(--radius-field); border: 1px solid rgba(255,255,255,0.35); background: var(--color-grafito); color: #fff; padding: 4px 8px; }
+.select-dark:focus { outline: none; border-color: #fff; }
+.pill { border-radius: var(--radius-pill); }
+.card { background: #fff; border: 1px solid var(--color-gris-200); border-radius: var(--radius-card); }
+
+/* Motivo Ruta: una sola línea naranja, esquinas grandes, entra y sale por los bordes */
+.ruta { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.ruta svg { width: 100%; height: 100%; }
+
+/* MapLibre */
+.maplibregl-popup-content { font-family: var(--font-sans); font-size: 12px; padding: 8px 10px; border-radius: var(--radius-button); color: var(--color-carbon); box-shadow: 0 2px 8px rgba(42,39,38,0.15); }
+.maplibregl-popup-tip { border-top-color: #fff; }
+.maplibregl-ctrl-group { border-radius: var(--radius-button) !important; box-shadow: 0 1px 4px rgba(42,39,38,0.15) !important; }
+.maplibregl-ctrl-group button { width: 32px; height: 32px; }
+.maplibregl-ctrl-attrib { font-family: var(--font-sans); font-size: 10px; }
+
+/* Draggable review pin */
+.review-pin { width: 22px; height: 30px; cursor: grab; filter: drop-shadow(0 2px 3px rgba(42,39,38,0.35)); }
+.review-pin::before { content: ""; display: block; width: 22px; height: 22px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--color-naranja); border: 2px solid #fff; }
+.review-pin:active { cursor: grabbing; }
