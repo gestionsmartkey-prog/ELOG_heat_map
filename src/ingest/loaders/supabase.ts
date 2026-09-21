@@ -14,8 +14,27 @@ export async function loadToSupabase(result: IngestResult, client?: SupabaseClie
   }).select("id").single();
   if (bErr || !batch) throw new Error(`batch insert failed: ${bErr?.message}`);
   const batch_id = batch.id as string;
+  try {
+    return await loadBatch(sb, result, batch_id);
+  } catch (e) {
+    await sb.from("import_batches").update({ status: "failed", finished_at: new Date().toISOString(), report: { ...result.report, error: String(e) } }).eq("id", batch_id);
+    throw e;
+  }
+}
+
+async function loadBatch(sb: SupabaseClient, result: IngestResult, batch_id: string): Promise<{ batch_id: string }> {
 
   const chunk = <T,>(arr: T[], n = 500) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
+  // PostgREST puts `in (...)` filters in the query string; keep each read well under URL limits.
+  const readIn = async <T,>(table: string, columns: string, column: string, values: string[]): Promise<T[]> => {
+    const out: T[] = [];
+    for (const vs of chunk(values, 200)) {
+      const { data, error } = await sb.from(table).select(columns).in(column, vs);
+      if (error) throw new Error(`${table} read: ${error.message}`);
+      out.push(...((data ?? []) as T[]));
+    }
+    return out;
+  };
 
   for (const rows of chunk(result.rawRows)) {
     const { error } = await sb.from("raw_rows").upsert(rows.map((r) => ({ batch_id, ...r })), { onConflict: "batch_id,row_number", ignoreDuplicates: true });
@@ -24,9 +43,8 @@ export async function loadToSupabase(result: IngestResult, client?: SupabaseClie
 
   // Locations: insert new keys, only refresh coordinates on rows that are not manual and not already ok.
   const keys = result.locations.map((l) => l.address_key);
-  const { data: existing, error: eErr } = await sb.from("locations").select("id,address_key,geocode_status,manual_override").in("address_key", keys);
-  if (eErr) throw new Error(`locations read: ${eErr.message}`);
-  const existingByKey = new Map((existing ?? []).map((e) => [e.address_key as string, e]));
+  const existing = await readIn<{ id: string; address_key: string; geocode_status: string; manual_override: boolean }>("locations", "id,address_key,geocode_status,manual_override", "address_key", keys);
+  const existingByKey = new Map(existing.map((e) => [e.address_key, e]));
   const toInsert = result.locations.filter((l) => !existingByKey.has(l.address_key));
   const toUpdate = result.locations.filter((l) => { const e = existingByKey.get(l.address_key); return e && !e.manual_override && e.geocode_status !== "ok" && l.geocode_status === "ok"; });
   for (const rows of chunk(toInsert)) {
@@ -37,9 +55,8 @@ export async function loadToSupabase(result: IngestResult, client?: SupabaseClie
     const { error } = await sb.from("locations").update({ lat: l.lat, lng: l.lng, h3_r9: l.h3_r9, geocode_provider: l.geocode_provider, geocode_confidence: l.geocode_confidence, geocode_raw: l.geocode_raw, geocode_status: l.geocode_status }).eq("address_key", l.address_key);
     if (error) throw new Error(`locations update: ${error.message}`);
   }
-  const { data: allLocs, error: aErr } = await sb.from("locations").select("id,address_key").in("address_key", keys);
-  if (aErr) throw new Error(`locations reread: ${aErr.message}`);
-  const idByKey = new Map((allLocs ?? []).map((e) => [e.address_key as string, e.id as string]));
+  const allLocs = await readIn<{ id: string; address_key: string }>("locations", "id,address_key", "address_key", keys);
+  const idByKey = new Map(allLocs.map((e) => [e.address_key, e.id]));
 
   const sellerRows = result.sellers.map((s) => ({
     external_id: s.external_id, kind: s.kind, parent_external_id: s.parent_external_id, name: s.name,
@@ -48,24 +65,43 @@ export async function loadToSupabase(result: IngestResult, client?: SupabaseClie
     extra: s.extra, row_hash: s.row_hash, first_batch_id: batch_id, last_seen_batch_id: batch_id, active: true,
   }));
   // Preserve first_batch_id for sellers we have seen before.
-  const { data: seen } = await sb.from("sellers").select("external_id,first_batch_id").in("external_id", sellerRows.map((s) => s.external_id));
-  const firstBatch = new Map((seen ?? []).map((s) => [s.external_id as string, s.first_batch_id as string]));
+  const seen = await readIn<{ external_id: string; first_batch_id: string }>("sellers", "external_id,first_batch_id", "external_id", sellerRows.map((s) => s.external_id));
+  const firstBatch = new Map(seen.map((s) => [s.external_id, s.first_batch_id]));
   for (const rows of chunk(sellerRows)) {
     const { error } = await sb.from("sellers").upsert(rows.map((r) => ({ ...r, first_batch_id: firstBatch.get(r.external_id) ?? batch_id })), { onConflict: "external_id" });
     if (error) throw new Error(`sellers upsert: ${error.message}`);
   }
 
+  let reviewCount = 0;
   if (result.reviews.length) {
-    const { data: sellerIds } = await sb.from("sellers").select("id,external_id").in("external_id", result.reviews.map((r) => r.external_id).filter(Boolean) as string[]);
-    const sid = new Map((sellerIds ?? []).map((s) => [s.external_id as string, s.id as string]));
-    const { error } = await sb.from("review_items").insert(result.reviews.map((r) => ({
+    const sellerIds = await readIn<{ id: string; external_id: string }>("sellers", "id,external_id", "external_id", result.reviews.map((r) => r.external_id).filter(Boolean) as string[]);
+    const sid = new Map(sellerIds.map((s) => [s.external_id, s.id]));
+    const candidates = result.reviews.map((r) => ({
       batch_id, seller_id: r.external_id ? sid.get(r.external_id) ?? null : null,
       location_id: r.address_key ? idByKey.get(r.address_key) ?? null : null, reason: r.reason, payload: r.payload,
-    })));
-    if (error) throw new Error(`review_items: ${error.message}`);
+    }));
+    // A file re-uploaded next month must not pile up a second copy of every open review.
+    const open = new Set<string>();
+    const openKey = (r: { seller_id: string | null; location_id: string | null; reason: string }) => `${r.reason}|${r.seller_id ?? ""}|${r.location_id ?? ""}`;
+    const sellerIdList = [...new Set(candidates.map((c) => c.seller_id).filter(Boolean) as string[])];
+    const locIdList = [...new Set(candidates.map((c) => c.location_id).filter(Boolean) as string[])];
+    for (const [col, ids] of [["seller_id", sellerIdList], ["location_id", locIdList]] as const) {
+      if (!ids.length) continue;
+      for (const vs of chunk(ids, 200)) {
+        const { data, error } = await sb.from("review_items").select("seller_id,location_id,reason").eq("resolved", false).in(col, vs);
+        if (error) throw new Error(`review_items read: ${error.message}`);
+        for (const r of data ?? []) open.add(openKey(r as { seller_id: string | null; location_id: string | null; reason: string }));
+      }
+    }
+    const fresh = candidates.filter((c) => !open.has(openKey(c)));
+    reviewCount = fresh.length;
+    for (const rows of chunk(fresh)) {
+      const { error } = await sb.from("review_items").insert(rows);
+      if (error) throw new Error(`review_items: ${error.message}`);
+    }
   }
 
-  const { error: fErr } = await sb.from("import_batches").update({ status: "loaded", loaded_count: result.sellers.length, review_count: result.reviews.length, finished_at: new Date().toISOString() }).eq("id", batch_id);
+  const { error: fErr } = await sb.from("import_batches").update({ status: "loaded", loaded_count: result.sellers.length, review_count: reviewCount, finished_at: new Date().toISOString() }).eq("id", batch_id);
   if (fErr) throw new Error(`batch finish: ${fErr.message}`);
   return { batch_id };
 }

@@ -22,7 +22,7 @@ export function HeatMapApp() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/sellers")
+    fetch("/api/sellers", { cache: "no-store" })
       .then(async (r) => { if (r.status === 401) { window.location.href = "/login"; return null; } if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
       .then((j) => { if (!cancelled && j) setData(j as SellersResponse); })
       .catch((e) => { if (!cancelled) setError(String(e)); });

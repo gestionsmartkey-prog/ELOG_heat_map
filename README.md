@@ -12,6 +12,12 @@ client export (.xlsx/.csv) → ingest pipeline → Supabase → /api/sellers →
 - **Storage** (`supabase/migrations`): `locations` (one row per door), `sellers` (many per door), `seller_metrics` (metrics as rows, so volume later needs no schema change), `geocode_cache`, `review_items`, `seller_kinds` (kinds are data, not an enum).
 - **Map**: the browser gets all active sellers once and does everything else with h3-js: hex aggregation at a zoom-dependent resolution (7 metro, 8 city, 9 street), quantile bins with labelled ranges, k-ring catchment on hover, kind filters, metric switching. Adding a metric is one entry in `src/lib/metrics.ts`.
 
+## Importar desde el navegador
+
+`/importar` (link "Importar" en la barra superior) sube un archivo por vez a `POST /api/import` (multipart, campo `file`, opcional `source`, `force=1` para recargar un archivo idéntico ya cargado). El servidor parsea, corre el pipeline sin red y carga a Supabase en una sola llamada; devuelve el reporte (`row_count`, `seller_count`, `location_count`, `review_count`, `by_kind`, avisos) y `409` con el lote existente cuando el hash del archivo ya está cargado. Límite 4 MB por archivo (límite de cuerpo de Vercel).
+
+La geolocalización corre dentro de Postgres (`georef_geocode_pending`) en tandas: la página llama `POST /api/geocode` hasta que `done` es `true` (cada llamada procesa unos segundos y devuelve el conteo); `?retry=1` reintenta los fallidos y los "fuera de zona". `GET /api/geocode` devuelve el conteo por estado. Con `DATA_SOURCE=fixture` la importación es una vista previa y no escribe nada.
+
 ## Run locally
 
 ```bash

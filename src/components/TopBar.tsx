@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { METRICS } from "@/lib/metrics";
 import type { SellersResponse } from "@/lib/types";
 
@@ -56,6 +57,7 @@ export function TopBar({ data, metricId, onMetric, enabledKinds, onToggleKind, c
           </span>
         ) : <span className="text-white/60">Cargando…</span>}
         {data?.viewer ? <span className="text-white/80">{data.viewer}</span> : null}
+        <Link href="/importar" className="btn btn-ghost" data-testid="import-link">Importar</Link>
         <form method="post" action="/api/logout"><button className="btn btn-ghost">Salir</button></form>
       </div>
     </header>
