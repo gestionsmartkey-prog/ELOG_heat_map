@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { cookies } from "next/headers";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { getSession } from "@/lib/session";
 import { importWorkbook, ImportError, MAX_UPLOAD_BYTES } from "@/lib/import";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +13,7 @@ export async function POST(request: NextRequest) {
   if (!(file instanceof File)) return NextResponse.json({ error: "missing_file", message: "Falta el archivo." }, { status: 400 });
   if (file.size > MAX_UPLOAD_BYTES) return NextResponse.json({ error: "too_large", message: `El archivo supera los ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)} MB.` }, { status: 413 });
 
-  const uploaded_by = await verifySessionToken((await cookies()).get(SESSION_COOKIE)?.value);
+  const uploaded_by = (await getSession())?.user ?? null;
   const source = String(form.get("source") ?? "meli").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 32) || "meli";
   const force = form.get("force") === "1";
 

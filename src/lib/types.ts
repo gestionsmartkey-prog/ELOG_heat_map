@@ -40,4 +40,6 @@ export type SellersResponse = {
   generated_at: string;
   /** Username from the session cookie; set by the API route, absent in fixtures. */
   viewer?: string | null;
+  /** Role from the session cookie: "admin" unlocks the whitelist screen. */
+  viewer_role?: string | null;
 };

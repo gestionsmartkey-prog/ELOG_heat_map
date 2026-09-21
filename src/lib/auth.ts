@@ -3,6 +3,9 @@ import { SignJWT, jwtVerify } from "jose";
 export const SESSION_COOKIE = "elog_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
+export type Role = "viewer" | "admin";
+export type SessionInfo = { user: string; role: Role };
+
 function secret(): Uint8Array {
   const s = process.env.SESSION_SECRET;
   if (!s || s.length < 16) throw new Error("SESSION_SECRET must be set (16+ chars)");
@@ -19,11 +22,7 @@ export function safeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-/**
- * Named users come from APP_USERS: "alice:secret1, bob:secret2" (comma or newline
- * separated; the first colon splits name from password). APP_PASSWORD is the
- * shared fallback that accepts any username. Both can coexist.
- */
+/** "alice:secret1, bob:secret2" (comma or newline separated; first colon splits name from password). */
 export function parseUsers(raw = process.env.APP_USERS ?? ""): Map<string, string> {
   const out = new Map<string, string>();
   for (const entry of raw.split(/[,\n]/)) {
@@ -36,41 +35,80 @@ export function parseUsers(raw = process.env.APP_USERS ?? ""): Map<string, strin
   return out;
 }
 
-export function hasAnyCredential(): boolean {
-  return parseUsers().size > 0 || Boolean(process.env.APP_PASSWORD);
+/** Bootstrap admins, same format as APP_USERS. These get role=admin and can whitelist others. */
+export function parseAdmins(raw = process.env.APP_ADMINS ?? ""): Map<string, string> {
+  return parseUsers(raw);
 }
 
-/** Returns the resolved username on success, null otherwise. */
-export function checkCredentials(username: string, password: string): string | null {
+export function hasAnyCredential(): boolean {
+  return parseUsers().size > 0 || parseAdmins().size > 0 || Boolean(process.env.APP_PASSWORD);
+}
+
+/**
+ * Env-based credential check (bootstrap + fallback). Admins win over viewers on a
+ * name collision. Returns the resolved session, or null. DB-backed users are checked
+ * separately (see lib/users) so this module stays free of server-only imports.
+ */
+export function checkEnvCredentials(username: string, password: string): SessionInfo | null {
   const name = username.trim().toLowerCase();
+  const admins = parseAdmins();
   const users = parseUsers();
-  const expected = users.get(name);
-  if (expected !== undefined) return safeEqual(password, expected) ? name : null;
-  // Always run one comparison so unknown usernames cost the same as known ones.
+  const adminPw = admins.get(name);
+  if (adminPw !== undefined) return safeEqual(password, adminPw) ? { user: name, role: "admin" } : null;
+  const userPw = users.get(name);
+  if (userPw !== undefined) return safeEqual(password, userPw) ? { user: name, role: "viewer" } : null;
   const shared = process.env.APP_PASSWORD ?? "";
-  if (shared && safeEqual(password, shared)) return name || "team";
+  if (shared && safeEqual(password, shared)) return { user: name || "team", role: "viewer" };
+  // Keep unknown usernames the same cost as known ones.
   safeEqual(password, "x".repeat(Math.max(1, password.length)));
   return null;
 }
 
-export async function createSessionToken(user: string): Promise<string> {
-  return new SignJWT({ role: "team" })
+export async function createSessionToken(session: SessionInfo): Promise<string> {
+  return new SignJWT({ role: session.role })
     .setProtectedHeader({ alg: "HS256" })
-    .setSubject(user)
+    .setSubject(session.user)
     .setIssuedAt()
     .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
     .sign(secret());
 }
 
-/** Returns the username inside a valid session token, or null. */
-export async function verifySessionToken(token: string | undefined): Promise<string | null> {
+/** Returns the session inside a valid token, or null. */
+export async function verifySessionToken(token: string | undefined): Promise<SessionInfo | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret(), { algorithms: ["HS256"] });
-    return payload.sub ?? "team";
+    const role: Role = payload.role === "admin" ? "admin" : "viewer";
+    return { user: (payload.sub as string) ?? "team", role };
   } catch {
     return null;
   }
+}
+
+/**
+ * Admin bearer token for automation: a short JWT with scope:"admin", signed with the
+ * same secret. Mint one with scripts/mint-admin-token.ts. Accepts a raw token or an
+ * "Authorization: Bearer <token>" header value.
+ */
+export async function verifyAdminToken(authorization: string | null | undefined): Promise<boolean> {
+  if (!authorization) return false;
+  const token = authorization.replace(/^Bearer\s+/i, "").trim();
+  if (!token) return false;
+  try {
+    const { payload } = await jwtVerify(token, secret(), { algorithms: ["HS256"] });
+    return payload.scope === "admin";
+  } catch {
+    return false;
+  }
+}
+
+/** Mint an admin bearer token (used by the CLI). */
+export async function createAdminToken(ttlSeconds = 3600, note = "admin"): Promise<string> {
+  return new SignJWT({ scope: "admin", note })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime(`${ttlSeconds}s`)
+    .sign(secret());
 }
 
 export const sessionCookieOptions = {

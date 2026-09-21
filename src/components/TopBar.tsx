@@ -57,7 +57,9 @@ export function TopBar({ data, metricId, onMetric, enabledKinds, onToggleKind, c
           </span>
         ) : <span className="text-white/60">Cargando…</span>}
         {data?.viewer ? <span className="text-white/80">{data.viewer}</span> : null}
+        <Link href="/revisar" className="btn btn-ghost" data-testid="review-link">Revisar{data && data.stats.open_reviews > 0 ? ` (${data.stats.open_reviews})` : ""}</Link>
         <Link href="/importar" className="btn btn-ghost" data-testid="import-link">Importar</Link>
+        {data?.viewer_role === "admin" ? <Link href="/usuarios" className="btn btn-ghost" data-testid="users-link">Usuarios</Link> : null}
         <form method="post" action="/api/logout"><button className="btn btn-ghost">Salir</button></form>
       </div>
     </header>

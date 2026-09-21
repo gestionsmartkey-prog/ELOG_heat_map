@@ -18,6 +18,18 @@ client export (.xlsx/.csv) → ingest pipeline → Supabase → /api/sellers →
 
 La geolocalización corre dentro de Postgres (`georef_geocode_pending`) en tandas: la página llama `POST /api/geocode` hasta que `done` es `true` (cada llamada procesa unos segundos y devuelve el conteo); `?retry=1` reintenta los fallidos y los "fuera de zona". `GET /api/geocode` devuelve el conteo por estado. Con `DATA_SOURCE=fixture` la importación es una vista previa y no escribe nada.
 
+## Revisar domicilios (cola de revisión)
+
+`/revisar` (link "Revisar" en la barra) lista los ítems abiertos de `review_items`: domicilios sin geolocalizar y direcciones en conflicto (registrada vs. nota). El revisor elige uno, arrastra el pin sobre la puerta real y guarda; eso fija el domicilio como `manual_override` (nunca lo pisa una importación posterior) y resuelve el ítem. Botones: **Guardar acá** (`POST /api/reviews/:id {action:"locate",lat,lng}`), **Reintentar automático** (`{action:"retry"}`, corre el geocoder georef sobre ese domicilio) y **Descartar** (`{action:"dismiss"}`, para "la registrada es correcta" o "dejar sin ubicar"). `GET /api/reviews` devuelve la cola. Todo detrás del gate de sesión.
+
+## Usuarios (whitelist)
+
+Los usuarios viven en la tabla `app_users` (email, contraseña con hash bcrypt de pgcrypto, rol viewer/admin). El login prueba primero los usuarios del entorno (`APP_USERS`/`APP_ADMINS` + `APP_PASSWORD`) y después la tabla, así que se puede habilitar gente sin redeploy.
+
+- Bootstrap: definí al menos un admin en `APP_ADMINS` (mismo formato que `APP_USERS`).
+- En el navegador: un admin abre `/usuarios` y da de alta email + contraseña (mínimo 8) con rol.
+- Por API/automatización: `POST /api/users` con `{email,password,role}`. Se autoriza con una **sesión admin** (cookie) **o** un token firmado `Authorization: Bearer <token>`. El token es un JWT corto con `scope:"admin"` firmado con `SESSION_SECRET`; generalo con `npm run mint:admin -- 3600` (usa el `SESSION_SECRET` de producción). `GET /api/users` (admin) lista; `POST /api/users {email,active:false}` desactiva.
+
 ## Run locally
 
 ```bash
