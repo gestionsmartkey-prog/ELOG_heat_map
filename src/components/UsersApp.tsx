@@ -46,7 +46,7 @@ export function UsersApp() {
       <header className="flex flex-wrap items-center gap-x-5 gap-y-2 bg-grafito px-4 py-2 text-white">
         <div className="flex items-center gap-3 pr-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/elog-logo-white.svg" alt="ELOG" width={100} height={30} className="h-[30px] w-auto" />
+          <img src="/brand/elog-logo-white.svg" alt="ELOG" width={100} height={30} className="h-[var(--size-logo)] w-auto" />
           <span className="t-etiqueta text-white/70">Usuarios</span>
         </div>
         <div className="ml-auto flex items-center gap-3">
@@ -72,11 +72,11 @@ export function UsersApp() {
                   <select value={role} onChange={(e) => setRole(e.target.value)} className="field" data-testid="user-role"><option value="viewer">Viewer</option><option value="admin">Admin</option></select></label>
                 <button className="btn btn-primary px-5 py-2.5" disabled={busy || !email || password.length < 8} onClick={add} data-testid="user-add">Habilitar</button>
               </div>
-              {msg ? <p className={`mt-3 text-[13px] ${msg.kind === "ok" ? "text-verde" : "text-rojo"}`} data-testid="user-msg">{msg.text}</p> : null}
+              {msg ? <p className={`mt-3 t-meta ${msg.kind === "ok" ? "text-verde" : "text-rojo"}`} data-testid="user-msg">{msg.text}</p> : null}
             </section>
 
-            <div className="card mt-6 overflow-hidden">
-              <table className="w-full text-[13px]">
+            <div className="card mt-6 overflow-x-auto">
+              <table className="w-full t-meta">
                 <thead className="bg-papel text-left text-gris-700"><tr><th className="px-4 py-2 font-medium">Email</th><th className="px-4 py-2 font-medium">Rol</th><th className="px-4 py-2 font-medium">Alta</th><th className="px-4 py-2 font-medium">Estado</th><th className="px-4 py-2"></th></tr></thead>
                 <tbody data-testid="user-table">
                   {(users ?? []).map((u) => (

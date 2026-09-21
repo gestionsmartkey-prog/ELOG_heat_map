@@ -12,9 +12,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </svg>
       </div>
       <div className="relative flex min-h-screen items-center justify-center px-4">
-        <form method="post" action="/api/login" className="w-full max-w-sm rounded-[16px] bg-white p-10 shadow-[0_8px_32px_rgba(0,0,0,0.25)]">
+        <form method="post" action="/api/login" className="w-full max-w-sm rounded-card bg-white p-8 shadow-modal sm:p-10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/elog-logo-grafito.svg" alt="ELOG" width={140} height={42} className="h-[42px] w-auto" />
+          <img src="/brand/elog-logo-grafito.svg" alt="ELOG" width={140} height={42} className="h-[var(--size-logo-lg)] w-auto" />
           <h1 className="t-h3 mt-6 text-carbon">Mapa de sellers</h1>
           <p className="mt-1 text-gris-700">Herramienta interna. Ingresá con tu usuario del equipo.</p>
           <label className="t-etiqueta mt-6 block text-gris-700" htmlFor="username">Usuario</label>
@@ -22,7 +22,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <label className="t-etiqueta mt-4 block text-gris-700" htmlFor="password">Contraseña</label>
           <input id="password" name="password" type="password" autoComplete="current-password" required className="field mt-2 w-full" />
           {error ? <p className="mt-3 text-rojo" role="alert">Usuario o contraseña incorrectos.</p> : null}
-          <button type="submit" className="btn btn-primary mt-6 w-full py-2.5 text-[15px]">Ingresar</button>
+          <button type="submit" className="btn btn-primary mt-6 w-full py-2.5">Ingresar</button>
         </form>
       </div>
     </main>

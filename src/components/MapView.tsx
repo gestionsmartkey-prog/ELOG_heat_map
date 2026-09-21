@@ -180,7 +180,7 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
         if (placed.some((b) => box.x < b.x + b.w + 4 && box.x + box.w + 4 > b.x && box.y < b.y + b.h + 2 && box.y + box.h + 2 > b.y)) continue;
         placed.push(box);
         const el = document.createElement("div");
-        el.className = "pointer-events-none select-none whitespace-nowrap rounded-[4px] bg-white/90 px-1.5 py-0.5 text-[11px] font-medium text-carbon tnum shadow-[0_1px_3px_rgba(42,39,38,0.15)]";
+        el.className = "pointer-events-none select-none whitespace-nowrap rounded-field bg-white/90 px-1.5 py-0.5 text-[11px] font-medium text-carbon tnum shadow-ctrl";
         el.textContent = text;
         markersRef.current.push(new maplibregl.Marker({ element: el, anchor: "bottom", offset: [0, -6] }).setLngLat([l.lng, l.lat]).addTo(map));
       }
@@ -216,7 +216,7 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
       <div className="pointer-events-none absolute bottom-6 left-3 z-10">
         <Legend bins={bins} metricShort={metric.short} res={res} />
       </div>
-      <button onClick={fitAll} className="btn btn-light absolute right-3 top-3 z-10 text-[13px] shadow-[0_1px_4px_rgba(42,39,38,0.15)]" title="Encuadrar todos los datos">
+      <button onClick={fitAll} className="btn btn-light t-meta absolute right-3 top-3 z-10 shadow-ctrl" title="Encuadrar todos los datos">
         Ver todo
       </button>
     </div>

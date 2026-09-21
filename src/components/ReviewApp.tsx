@@ -92,7 +92,7 @@ export function ReviewApp() {
       <header className="flex flex-wrap items-center gap-x-5 gap-y-2 bg-grafito px-4 py-2 text-white">
         <div className="flex items-center gap-3 pr-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/elog-logo-white.svg" alt="ELOG" width={100} height={30} className="h-[30px] w-auto" />
+          <img src="/brand/elog-logo-white.svg" alt="ELOG" width={100} height={30} className="h-[var(--size-logo)] w-auto" />
           <span className="t-etiqueta text-white/70">Revisar domicilios</span>
         </div>
         <span className="t-dato text-white/80" data-testid="review-count">{items ? `${items.length} pendientes` : "Cargando…"}</span>
@@ -102,8 +102,8 @@ export function ReviewApp() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <aside className="w-[34%] min-w-[320px] max-w-[460px] overflow-auto border-r border-gris-200 bg-white">
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <aside className={`w-full overflow-auto border-gris-200 bg-white md:w-[var(--queue-w)] md:min-w-[300px] md:max-w-[var(--panel-max)] md:border-r ${selected ? "max-md:hidden" : "block"}`}>
           {error ? <p className="p-4 text-rojo">No se pudo cargar la cola: {error}</p> : null}
           {items && items.length === 0 && !error ? <p className="p-6 text-gris-700">No hay domicilios pendientes de revisión. 🎉</p> : null}
           {grouped.map(([reason, list]) => (
@@ -121,7 +121,7 @@ export function ReviewApp() {
                       data-testid="review-row"
                     >
                       <div className="t-dato text-carbon">{it.seller?.name ?? it.location?.address_display ?? `Ítem ${it.id}`}</div>
-                      <div className="mt-0.5 text-[13px] text-gris-700">{it.location?.address_display ?? "—"}{it.location?.locality ? ` · ${it.location.locality}` : ""}</div>
+                      <div className="mt-0.5 t-meta text-gris-700">{it.location?.address_display ?? "—"}{it.location?.locality ? ` · ${it.location.locality}` : ""}</div>
                     </button>
                   </li>
                 ))}
@@ -130,45 +130,46 @@ export function ReviewApp() {
           ))}
         </aside>
 
-        <section className="relative min-w-0 flex-1">
+        <section className={`relative min-w-0 flex-1 ${selected ? "max-md:block" : "max-md:hidden"}`}>
           {selected ? (
             <>
               <div className="absolute inset-0"><ReviewMap pin={pin} onMove={onMove} focusKey={focusKey} /></div>
               <div className="pointer-events-none absolute left-4 right-4 top-4 z-10 flex justify-center">
-                <div className="card pointer-events-auto max-w-2xl p-4 shadow-[0_2px_12px_rgba(42,39,38,0.15)]" data-testid="review-detail">
+                <div className="card pointer-events-auto max-w-2xl p-4 shadow-pop" data-testid="review-detail">
+                  <button onClick={() => { setSelectedId(null); setMoved(false); }} className="mb-2 text-tostado hover:underline md:hidden">← Volver a la lista</button>
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <div className="t-h3 text-carbon">{selected.seller?.name ?? "Domicilio"}</div>
-                      <div className="mt-0.5 text-[13px] text-gris-700">{REASONS[selected.reason] ?? selected.reason}</div>
+                      <div className="mt-0.5 t-meta text-gris-700">{REASONS[selected.reason] ?? selected.reason}</div>
                     </div>
-                    {selected.seller ? <span className="pill border border-gris-200 px-2 py-0.5 text-[12px] text-gris-700">{selected.seller.external_id}</span> : null}
+                    {selected.seller ? <span className="pill t-micro border border-gris-200 px-2 py-0.5 text-gris-700">{selected.seller.external_id}</span> : null}
                   </div>
 
                   {selected.reason === "address_conflict" ? (
-                    <div className="mt-3 grid grid-cols-2 gap-3 text-[13px]">
-                      <div className="rounded-[8px] border border-gris-200 bg-papel p-3">
+                    <div className="mt-3 grid grid-cols-2 gap-3 t-meta">
+                      <div className="rounded-button border border-gris-200 bg-papel p-3">
                         <div className="t-etiqueta text-gris-700">Registrada</div>
                         <div className="mt-1 text-carbon">{String(selected.payload.structured ?? selected.location?.address_display ?? "—")}</div>
                         <div className="text-gris-700">CP {String(selected.payload.postal ?? selected.location?.postal_code ?? "—")}</div>
                       </div>
-                      <div className="rounded-[8px] border border-ambar/40 bg-ambar/5 p-3">
+                      <div className="rounded-button border border-ambar/40 bg-ambar/5 p-3">
                         <div className="t-etiqueta text-ambar">En la nota</div>
                         <div className="mt-1 text-carbon">{String(selected.payload.note_address ?? "—")}</div>
                         <div className="text-gris-700">CP {String(selected.payload.note_postal ?? "—")}</div>
                       </div>
                     </div>
                   ) : (
-                    <p className="mt-2 text-[13px] text-gris-700">{selected.location?.address_display ?? "Sin dirección"}{selected.location?.locality ? ` · ${selected.location.locality}` : ""}{selected.location?.postal_code ? ` (CP ${selected.location.postal_code})` : ""}</p>
+                    <p className="mt-2 t-meta text-gris-700">{selected.location?.address_display ?? "Sin dirección"}{selected.location?.locality ? ` · ${selected.location.locality}` : ""}{selected.location?.postal_code ? ` (CP ${selected.location.postal_code})` : ""}</p>
                   )}
 
-                  <p className="mt-3 text-[13px] text-gris-700">Arrastrá el pin sobre la puerta real y guardá, o descartá el ítem.</p>
+                  <p className="mt-3 t-meta text-gris-700">Arrastrá el pin sobre la puerta real y guardá, o descartá el ítem.</p>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <button className="btn btn-primary" disabled={busy || !moved} onClick={() => act("locate")} data-testid="save-location" title={moved ? "" : "Movés el pin para habilitar"}>Guardar acá</button>
                     {selected.reason !== "address_conflict" ? <button className="btn btn-light" disabled={busy} onClick={() => act("retry")}>Reintentar automático</button> : null}
                     <button className="btn btn-light" disabled={busy} onClick={() => act("dismiss")} data-testid="dismiss">{selected.reason === "address_conflict" ? "La registrada es correcta" : "Descartar"}</button>
-                    <span className="tnum text-[12px] text-gris-700">{pin[1].toFixed(5)}, {pin[0].toFixed(5)}</span>
+                    <span className="tnum t-micro text-gris-700">{pin[1].toFixed(5)}, {pin[0].toFixed(5)}</span>
                   </div>
-                  {note ? <p className="mt-2 text-[13px] text-rojo" data-testid="review-note">{note}</p> : null}
+                  {note ? <p className="mt-2 t-meta text-rojo" data-testid="review-note">{note}</p> : null}
                 </div>
               </div>
             </>
