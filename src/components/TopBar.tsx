@@ -30,7 +30,7 @@ export function TopBar({ data, metricId, onMetric, enabledKinds, onToggleKind, c
   return (
     <header className="bg-grafito text-white shadow-ctrl">
       {/* Fila 1: marca + navegación (una sola nav, se reordena a pantalla completa en móvil) */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-[var(--gutter)] py-2 lg:px-[var(--gutter-lg)]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-[var(--gutter)] py-2 lg:px-[var(--gutter-lg)]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/brand/elog-logo-white.svg" alt="ELOG" width={100} height={30} className="h-[var(--size-logo)] w-auto" />
         <span className="t-etiqueta hidden text-white/70 sm:block">Mapa de sellers · AMBA</span>
@@ -62,7 +62,7 @@ export function TopBar({ data, metricId, onMetric, enabledKinds, onToggleKind, c
       </div>
 
       {/* Controles del mapa: en línea en md+, plegables en móvil (una sola instancia) */}
-      <div className={`${filtersOpen ? "flex" : "hidden"} flex-col gap-3 px-[var(--gutter)] pb-3 md:flex md:flex-row md:flex-wrap md:items-center md:gap-x-5 md:gap-y-2 md:pb-2 lg:px-[var(--gutter-lg)]`}>
+      <div className={`${filtersOpen ? "flex" : "hidden"} flex-col gap-2 px-[var(--gutter)] pb-2 md:flex md:flex-row md:flex-wrap md:items-center md:gap-x-6 md:gap-y-2 md:pb-2 lg:px-[var(--gutter-lg)]`}>
         <label className="flex items-center gap-2">
           <span className="t-meta text-white/80">Métrica</span>
           <select value={metricId} onChange={(e) => onMetric(e.target.value)} className="select-dark max-md:flex-1" data-testid="metric-select">
@@ -73,7 +73,7 @@ export function TopBar({ data, metricId, onMetric, enabledKinds, onToggleKind, c
         <div className="flex flex-wrap items-center gap-2" data-testid="kind-filters">
           <span className="t-meta text-white/80">Mostrar</span>
           {(data?.kinds ?? []).map((k) => (
-            <label key={k.kind} className={`pill t-meta flex cursor-pointer items-center gap-1.5 border px-2 py-1 ${enabledKinds.has(k.kind) ? "border-white/60 bg-white/10" : "border-white/25 text-white/60"}`}>
+            <label key={k.kind} className={`pill t-meta flex cursor-pointer items-center gap-2 border px-2 py-1 ${enabledKinds.has(k.kind) ? "border-white/60 bg-white/10" : "border-white/25 text-white/60"}`}>
               <input type="checkbox" className="sr-only" checked={enabledKinds.has(k.kind)} onChange={() => onToggleKind(k.kind)} />
               <span className="inline-block h-2.5 w-2.5 rounded-pill" style={{ background: k.color ?? "#A3A09E" }} />
               <span>{k.label}</span>

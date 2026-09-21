@@ -28,7 +28,8 @@
   --radius-field: 4px;   /* campos, chips chicos */
   --radius-button: 8px;  /* botones, tarjetas chicas */
   --radius-card: 16px;   /* tarjetas, tablas, contenedores */
-  --radius-pill: 999px;  /* píldoras y etiquetas de estado */
+  --radius-panel: 32px;  /* bloques grandes de color / paneles (manual: 32–64) */
+  --radius-pill: 999px;  /* píldoras y etiquetas de estado. Máx. dos radios por pieza */
 
   /* Elevación (una sola fuente para todas las sombras) → shadow-ctrl / shadow-card / shadow-pop / shadow-modal */
   --shadow-ctrl: 0 1px 4px rgba(42, 39, 38, 0.15);
@@ -51,8 +52,16 @@
   --panel-max: 440px;
   --panel-sheet-max: 78dvh; /* alto máx. del panel como hoja inferior en móvil */
   --queue-w: 380px;         /* lista de la cola de revisión en escritorio */
-  --gutter: 1rem;           /* margen lateral de página en móvil */
-  --gutter-lg: 1.5rem;      /* margen lateral en escritorio */
+  --gutter: 1rem;           /* margen lateral de página en móvil (= space-2) */
+  --gutter-lg: 1.5rem;      /* margen lateral en escritorio (= space-3) */
+
+  /* Espaciado — escala del manual (base 8): 8 · 16 · 24 · 40 · 64 · 96. Sin valores intermedios. */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 40px;
+  --space-5: 64px;
+  --space-6: 96px;
 }
 
 html, body { height: 100%; }
@@ -71,8 +80,8 @@ body {
 .t-etiqueta { font-family: var(--font-display); font-weight: 600; font-size: 12px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; }
 .t-display { font-family: var(--font-display); font-weight: 700; line-height: 1.05; }
 .t-display-lg { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-height: 1.05; font-variant-numeric: tabular-nums; }
-.t-meta { font-size: 13px; line-height: 1.35; }   /* datos secundarios en listas y tablas */
-.t-micro { font-size: 12px; line-height: 1.2; }    /* chips, notas al pie */
+.t-meta { font-size: 14px; line-height: 1.4; }     /* "cuerpo chico" del manual: datos secundarios en listas y tablas */
+.t-micro { font-size: 12px; line-height: 1.2; }    /* "etiqueta" del manual (12): chips, notas al pie */
 .tnum { font-variant-numeric: tabular-nums; }
 
 /* Controles */

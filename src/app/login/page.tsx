@@ -12,7 +12,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </svg>
       </div>
       <div className="relative flex min-h-screen items-center justify-center px-4">
-        <form method="post" action="/api/login" className="w-full max-w-sm rounded-card bg-white p-8 shadow-modal sm:p-10">
+        <form method="post" action="/api/login" className="w-full max-w-sm rounded-card bg-white p-6 shadow-modal sm:p-10">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/elog-logo-grafito.svg" alt="ELOG" width={140} height={42} className="h-[var(--size-logo-lg)] w-auto" />
           <h1 className="t-h3 mt-6 text-carbon">Mapa de sellers</h1>
@@ -21,7 +21,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <input id="username" name="username" type="text" autoComplete="username" autoFocus required className="field mt-2 w-full" />
           <label className="t-etiqueta mt-4 block text-gris-700" htmlFor="password">Contraseña</label>
           <input id="password" name="password" type="password" autoComplete="current-password" required className="field mt-2 w-full" />
-          {error ? <p className="mt-3 text-rojo" role="alert">Usuario o contraseña incorrectos.</p> : null}
+          {error ? <p className="mt-2 text-rojo" role="alert">Usuario o contraseña incorrectos.</p> : null}
           <button type="submit" className="btn btn-primary mt-6 w-full py-2.5">Ingresar</button>
         </form>
       </div>
