@@ -30,6 +30,24 @@ Los usuarios viven en la tabla `app_users` (email, contraseña con hash bcrypt d
 - En el navegador: un admin abre `/usuarios` y da de alta email + contraseña (mínimo 8) con rol.
 - Por API/automatización: `POST /api/users` con `{email,password,role}`. Se autoriza con una **sesión admin** (cookie) **o** un token firmado `Authorization: Bearer <token>`. El token es un JWT corto con `scope:"admin"` firmado con `SESSION_SECRET`; generalo con `npm run mint:admin -- 3600` (usa el `SESSION_SECRET` de producción). `GET /api/users` (admin) lista; `POST /api/users {email,active:false}` desactiva.
 
+## Sistema de diseño (tokens)
+
+Todos los valores visuales salen de tokens en `src/app/globals.css`; no se usan valores sueltos en los componentes.
+
+- **Color** — `@theme` (`--color-naranja`, `--color-grafito`, `--color-papel`, grises, semánticos). Se usan como `bg-*`, `text-*`, `border-*`.
+- **Radios (esquinas)** — sólo cuatro: `rounded-field` (4px, campos/chips), `rounded-button` (8px, botones y tarjetas chicas), `rounded-card` (16px, tarjetas/tablas/hoja móvil), `rounded-pill` (999px, píldoras y puntos). Nada de radios arbitrarios.
+- **Sombras** — `shadow-ctrl`, `shadow-card`, `shadow-pop`, `shadow-modal` (una sola fuente para toda la elevación).
+- **Tipografía** — utilidades `t-h3`, `t-dato`, `t-etiqueta`, `t-display`, `t-display-lg`, `t-meta` (13px), `t-micro` (12px), `tnum`.
+- **Layout** — dimensiones en `:root`: `--size-logo`, `--panel-w/-min/-max`, `--panel-sheet-max`, `--queue-w`, `--gutter` / `--gutter-lg`.
+- **Breakpoints** — móvil (base), tablet (`md`, ≥768px), escritorio (`lg`, ≥1024px).
+
+## Responsive
+
+- **Mapa** (`/`): en escritorio, mapa + panel lateral; en móvil el panel es una hoja inferior que aparece al seleccionar un área. La barra superior pliega los controles del mapa en «Filtros» y la navegación en «Menú».
+- **Revisar** (`/revisar`): lista + mapa lado a lado en escritorio; en móvil se ve la lista y, al elegir un domicilio, el mapa a pantalla completa con «← Volver a la lista».
+- **Importar / Usuarios**: contenido centrado con márgenes por token; las tablas hacen scroll horizontal en pantallas chicas.
+- Verificado sin scroll horizontal a 390 / 834 / 1440 px: `npm run test:responsive` (con el server en `DATA_SOURCE=fixture`).
+
 ## Run locally
 
 ```bash

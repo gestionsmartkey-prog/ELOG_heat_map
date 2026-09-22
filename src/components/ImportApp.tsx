@@ -108,19 +108,19 @@ export function ImportApp() {
 
   return (
     <div className="min-h-screen bg-papel">
-      <header className="flex flex-wrap items-center gap-x-5 gap-y-2 bg-grafito px-4 py-2 text-white">
-        <div className="flex items-center gap-3 pr-2">
+      <header className="flex flex-wrap items-center gap-x-6 gap-y-2 bg-grafito px-4 py-2 text-white">
+        <div className="flex items-center gap-2 pr-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/elog-logo-white.svg" alt="ELOG" width={100} height={30} className="h-[30px] w-auto" />
+          <img src="/brand/elog-logo-white.svg" alt="ELOG" width={100} height={30} className="h-[var(--size-logo)] w-auto" />
           <span className="t-etiqueta text-white/70">Importar sellers</span>
         </div>
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-2">
           <Link href="/" className="btn btn-ghost">Ver mapa</Link>
           <form method="post" action="/api/logout"><button className="btn btn-ghost">Salir</button></form>
         </div>
       </header>
 
-      <main className="mx-auto max-w-3xl px-4 py-8">
+      <main className="mx-auto max-w-3xl px-4 py-6">
         <h1 className="t-h3 text-carbon">Importar un archivo de sellers</h1>
         <p className="mt-1 text-gris-700">Subí el export tal cual llega (.xlsx, .xls o .csv, hasta {MAX_MB} MB). Las columnas se reconocen solas; lo que no se reconoce se guarda igual. Después del alta, las direcciones nuevas se geolocalizan acá mismo.</p>
 
@@ -131,7 +131,7 @@ export function ImportApp() {
             onDragLeave={() => setDragging(false)}
             onDrop={(e) => { e.preventDefault(); setDragging(false); pick(e.dataTransfer.files?.[0]); }}
             onClick={() => inputRef.current?.click()}
-            className={`flex cursor-pointer flex-col items-center justify-center rounded-[8px] border-2 border-dashed px-6 py-10 text-center transition-colors ${dragging ? "border-naranja bg-naranja/5" : "border-gris-400 hover:border-grafito"}`}
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-button border-2 border-dashed px-6 py-10 text-center transition-colors ${dragging ? "border-naranja bg-naranja/5" : "border-gris-400 hover:border-grafito"}`}
           >
             <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" className="sr-only" data-testid="file-input" onChange={(e) => pick(e.target.files?.[0])} />
             {file ? (
@@ -155,7 +155,7 @@ export function ImportApp() {
                 <option value="otro">Otro</option>
               </select>
             </label>
-            <button type="button" className="btn btn-primary px-5 py-2.5" disabled={!file || busy !== "idle"} onClick={() => submit(false)} data-testid="import-button">
+            <button type="button" className="btn btn-primary px-4 py-2.5" disabled={!file || busy !== "idle"} onClick={() => submit(false)} data-testid="import-button">
               {busy === "uploading" ? "Importando…" : "Importar"}
             </button>
             {busy === "geocoding" ? <span className="text-gris-700">Geolocalizando en segundo plano…</span> : null}
@@ -177,7 +177,7 @@ export function ImportApp() {
               <h2 className="t-h3 text-carbon">{outcome?.status === "dry_run" ? "Vista previa (sin cargar)" : "Archivo cargado"}</h2>
               <span className="text-gris-700">hoja «{outcome?.sheet}»</span>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
               <Tile value={report.row_count} label="Filas" />
               <Tile value={report.seller_count} label="Sellers" />
               <Tile value={report.location_count} label="Domicilios" />
@@ -185,10 +185,10 @@ export function ImportApp() {
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               {Object.entries(report.by_kind).map(([k, n]) => (
-                <span key={k} className="pill border border-gris-200 bg-papel px-3 py-1 text-[13px] text-carbon"><span className="tnum font-semibold">{n}</span> {KIND_LABELS[k] ?? k}</span>
+                <span key={k} className="pill border border-gris-200 bg-papel px-2 py-1 t-meta text-carbon"><span className="tnum font-semibold">{n}</span> {KIND_LABELS[k] ?? k}</span>
               ))}
               {Object.entries(report.by_province).map(([k, n]) => (
-                <span key={k} className="pill border border-gris-200 px-3 py-1 text-[13px] text-gris-700"><span className="tnum font-semibold">{n}</span> {k}</span>
+                <span key={k} className="pill border border-gris-200 px-2 py-1 t-meta text-gris-700"><span className="tnum font-semibold">{n}</span> {k}</span>
               ))}
             </div>
             {report.unmapped_columns.length ? (
@@ -197,7 +197,7 @@ export function ImportApp() {
             {report.warnings.length ? (
               <details className="mt-4">
                 <summary className="cursor-pointer text-gris-700">{report.warnings.length} avisos</summary>
-                <ul className="mt-2 max-h-48 list-disc overflow-auto pl-5 text-[13px] text-gris-700">{report.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
+                <ul className="mt-2 max-h-48 list-disc overflow-auto pl-4 t-meta text-gris-700">{report.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>
               </details>
             ) : null}
           </section>
@@ -209,18 +209,18 @@ export function ImportApp() {
               <h2 className="t-h3 text-carbon">Geolocalización</h2>
               <span className="tnum text-gris-700">{counts.ok + counts.manual} de {geocodeTotal} domicilios ubicados</span>
             </div>
-            <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-[999px] bg-gris-200" aria-hidden="true">
+            <div className="mt-2 flex h-2.5 w-full overflow-hidden rounded-pill bg-gris-200" aria-hidden="true">
               <div className="bg-verde" style={{ width: `${((counts.ok + counts.manual) / geocodeTotal) * 100}%` }} />
               <div className="bg-ambar" style={{ width: `${(counts.review / geocodeTotal) * 100}%` }} />
               <div className="bg-rojo" style={{ width: `${(counts.failed / geocodeTotal) * 100}%` }} />
             </div>
-            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-gris-700">
+            <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 t-meta text-gris-700">
               <span><Dot c="var(--color-verde)" /> {counts.ok + counts.manual} ubicados</span>
               <span><Dot c="var(--color-ambar)" /> {counts.review} fuera de zona</span>
               <span><Dot c="var(--color-rojo)" /> {counts.failed} sin resolver</span>
               <span><Dot c="var(--color-gris-400)" /> {counts.pending} pendientes</span>
             </div>
-            <div className="mt-4 flex flex-wrap gap-3">
+            <div className="mt-4 flex flex-wrap gap-2">
               {counts.pending > 0 && busy === "idle" ? <button type="button" className="btn btn-primary" onClick={() => geocode(false)}>Continuar geolocalizando</button> : null}
               {counts.failed + counts.review > 0 && busy === "idle" ? <button type="button" className="btn btn-light" onClick={() => geocode(true)}>Reintentar {counts.failed + counts.review} sin resolver</button> : null}
               {busy === "geocoding" ? <button type="button" className="btn btn-light" onClick={() => { cancelRef.current = true; }}>Pausar</button> : null}
@@ -229,11 +229,11 @@ export function ImportApp() {
           </section>
         ) : null}
 
-        <section className="mt-8">
+        <section className="mt-6">
           <h2 className="t-etiqueta text-gris-700">Historial de importaciones</h2>
           {batches.length ? (
-            <div className="card mt-3 overflow-hidden">
-              <table className="w-full text-[13px]" data-testid="batch-table">
+            <div className="card mt-2 overflow-x-auto">
+              <table className="w-full t-meta" data-testid="batch-table">
                 <thead className="bg-papel text-left text-gris-700">
                   <tr><th className="px-4 py-2 font-medium">Archivo</th><th className="px-4 py-2 font-medium">Fecha</th><th className="px-4 py-2 text-right font-medium">Filas</th><th className="px-4 py-2 text-right font-medium">Cargados</th><th className="px-4 py-2 text-right font-medium">A revisar</th><th className="px-4 py-2 font-medium">Estado</th></tr>
                 </thead>
@@ -260,21 +260,21 @@ export function ImportApp() {
 
 function Tile({ value, label, tone }: { value: number; label: string; tone?: "ambar" }) {
   return (
-    <div className="rounded-[8px] border border-gris-200 bg-papel px-4 py-3">
-      <div className={`t-display tnum text-[26px] ${tone === "ambar" ? "text-ambar" : "text-carbon"}`}>{value}</div>
+    <div className="rounded-button border border-gris-200 bg-papel px-4 py-2">
+      <div className={`t-display-lg ${tone === "ambar" ? "text-ambar" : "text-carbon"}`}>{value}</div>
       <div className="t-etiqueta mt-1 text-gris-700">{label}</div>
     </div>
   );
 }
 
 function Dot({ c }: { c: string }) {
-  return <span className="mr-1 inline-block h-2.5 w-2.5 rounded-full align-middle" style={{ background: c }} />;
+  return <span className="mr-1 inline-block h-2.5 w-2.5 rounded-pill align-middle" style={{ background: c }} />;
 }
 
 function Status({ s }: { s: string }) {
   const map: Record<string, [string, string]> = { loaded: ["Cargado", "text-verde"], loading: ["Cargando", "text-ambar"], failed: ["Falló", "text-rojo"], pending: ["Pendiente", "text-gris-700"] };
   const [label, cls] = map[s] ?? [s, "text-gris-700"];
-  return <span className={`pill border border-current px-2 py-0.5 text-[12px] ${cls}`}>{label}</span>;
+  return <span className={`pill border border-current px-2 py-0.5 t-micro ${cls}`}>{label}</span>;
 }
 
 function fmtDate(iso?: string | null) {
