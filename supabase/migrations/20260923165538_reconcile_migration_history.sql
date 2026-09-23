@@ -1,0 +1,11 @@
+-- 20260923165538: one-time reconciliation of production's migration history (2026-09-23).
+--
+-- Before the Supabase GitHub integration was switched on, migrations had been applied to production
+-- by hand, so the recorded history (26 timestamped entries) did not match this folder. The owner
+-- approved resetting the recorded history to 0001-0006, which were already in the schema; the old
+-- history was kept in supabase_migrations.schema_migrations_backup_20260923. This file exists only
+-- so the version recorded by that reset has a matching file. It changes nothing on any database.
+--
+-- From here on, new migrations use timestamped names (`supabase migration new <name>`) and sort
+-- after this one.
+select 1;

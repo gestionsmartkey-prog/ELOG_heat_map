@@ -8,6 +8,8 @@ type Report = {
   row_count: number; seller_count: number; location_count: number; review_count: number;
   by_kind: Record<string, number>; by_province: Record<string, number>;
   unmapped_columns: string[]; warnings: string[];
+  /** Absent on batches loaded before these counters existed. */
+  duplicates_skipped?: number; derived_ids?: number;
 };
 type Outcome = { status: "loaded" | "dry_run" | "duplicate"; batch_id: string | null; report: Report; sheet: string; filename?: string; created_at?: string };
 type Counts = { pending: number; ok: number; failed: number; review: number; manual: number };
@@ -191,6 +193,12 @@ export function ImportApp() {
                 <span key={k} className="pill border border-gris-200 px-2 py-1 t-meta text-gris-700"><span className="tnum font-semibold">{n}</span> {k}</span>
               ))}
             </div>
+            {report.duplicates_skipped || report.derived_ids ? (
+              <p className="mt-4 text-gris-700" data-testid="dedupe-note">
+                {report.duplicates_skipped ? `${report.duplicates_skipped} filas repetidas (mismo seller, mismos datos) no se cargaron dos veces. ` : ""}
+                {report.derived_ids ? `${report.derived_ids} filas sin Seller ID se identificaron por nombre + dirección + piso/depto.` : ""}
+              </p>
+            ) : null}
             {report.unmapped_columns.length ? (
               <p className="mt-4 text-gris-700">Columnas guardadas sin mapear: {report.unmapped_columns.join(", ")}.</p>
             ) : null}

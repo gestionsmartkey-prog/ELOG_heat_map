@@ -15,6 +15,8 @@ export const HEADER_ALIASES: Record<keyof Omit<MappedRow, "extra">, string[]> = 
   city: ["ciudad", "city", "partido", "municipio"],
   province: ["provincia", "province", "estado", "state"],
   postal_code: ["codigo postal", "cp", "cpa", "zip", "zip code", "postal", "postal code"],
+  // Not "departamento": in some exports that column is the district, not the flat.
+  unit: ["piso", "depto", "dpto", "piso depto", "piso y depto", "piso dpto", "unidad", "oficina", "apartment", "floor", "unit"],
   note: ["informacion adicional", "info adicional", "observaciones", "notas", "nota", "note", "notes", "comentarios", "referencia"],
   lat: ["lat", "latitud", "latitude"],
   lng: ["lng", "lon", "long", "longitud", "longitude"],
@@ -46,7 +48,7 @@ function asNumber(v: unknown): number | null {
 export function mapRow(raw: RawRow): { row: MappedRow; unmapped: string[] } {
   const row: MappedRow = {
     external_id: null, name: null, company: null, street: null, street_number: null,
-    locality: null, city: null, province: null, postal_code: null, note: null,
+    locality: null, city: null, province: null, postal_code: null, unit: null, note: null,
     lat: null, lng: null, extra: {},
   };
   const unmapped: string[] = [];
@@ -61,6 +63,14 @@ export function mapRow(raw: RawRow): { row: MappedRow; unmapped: string[] } {
       continue;
     }
     if (field === "lat" || field === "lng") row[field] = asNumber(value);
+    else if (field === "unit") {
+      // "Piso" and "Depto" often come as two columns: keep both, labelled when the value is bare ("3" -> "Piso 3").
+      const t = asText(value);
+      if (t) {
+        const part = /^[a-z0-9]{1,4}$/i.test(t) ? `${header.trim()} ${t}` : t;
+        row.unit = row.unit ? `${row.unit} ${part}` : part;
+      }
+    }
     else if (row[field] === null) row[field] = asText(value);
   }
   return { row, unmapped };
