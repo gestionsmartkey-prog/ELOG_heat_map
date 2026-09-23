@@ -130,7 +130,7 @@ export async function runPipeline(rawRows: RawRow[], opts: PipelineOptions): Pro
 
     const conflict = noteConflictsWithAddress(note.address, street, number, postal);
     if (conflict && key) {
-      reviews.push({ external_id, address_key: key, reason: "address_conflict", payload: { structured: addressDisplay(street, number), postal, note_address: note.address?.display, note_postal: note.address?.postal_code } });
+      reviews.push({ external_id, address_key: key, reason: "address_conflict", payload: { structured: addressDisplay(street, number), postal, note_address: note.address?.display, note_postal: note.address?.postal_code, note_locality: note.address?.locality, note_province: note.address?.province } });
     }
 
     sellers.push({

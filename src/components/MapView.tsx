@@ -215,7 +215,7 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
     <div className="relative h-full w-full" data-testid="map" data-ready={ready ? "1" : "0"} data-hexes={hexes.features.length}>
       <div ref={containerRef} className="h-full w-full" />
       <div className="pointer-events-none absolute bottom-6 left-3 z-10">
-        <Legend bins={bins} metricShort={metric.short} res={res} />
+        <Legend bins={bins} one={metric.one} many={metric.short} res={res} />
       </div>
       <button onClick={fitAll} className="btn btn-light t-meta absolute right-3 top-3 z-10 shadow-ctrl" title="Encuadrar todos los datos">
         Ver todo

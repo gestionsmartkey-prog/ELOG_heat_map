@@ -82,7 +82,7 @@ await page.screenshot({ path: `${out}/04-city.png` });
 await page.evaluate(() => window.__elogMap.jumpTo({ center: [-58.62, -34.65], zoom: 14 }));
 await page.waitForTimeout(1200);
 const resLabel = await page.textContent('[data-testid="legend"]');
-console.log("legend at z14:", resLabel?.replace(/\s+/g, " ").slice(0, 60));
+console.log("legend at z14 (res " + await page.getAttribute('[data-testid="legend"]', "data-res") + "):", resLabel?.replace(/\s+/g, " ").slice(0, 60));
 await page.screenshot({ path: `${out}/05-doors.png` });
 
 // 8. Sign out returns to login
