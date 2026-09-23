@@ -6,7 +6,7 @@ import type { LngLatBoundsLike, Map as MLMap, MapMouseEvent } from "maplibre-gl"
 import { cellToLatLng } from "h3-js";
 import type { MapSeller } from "@/lib/types";
 import type { Metric } from "@/lib/metrics";
-import { aggregate, catchment, computeBins, pointsGeoJSON, resolutionForZoom, toGeoJSON, type Bin, type CellAgg } from "@/lib/hexes";
+import { aggregate, catchment, computeBins, pointsGeoJSON, resolutionForZoom, toGeoJSON, zoneLabel, type Bin, type CellAgg } from "@/lib/hexes";
 import { Legend } from "./Legend";
 
 const BASEMAP = process.env.NEXT_PUBLIC_BASEMAP_STYLE ?? "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
@@ -131,7 +131,8 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
         const cellAgg = a.get(cell);
         if (!cellAgg) return;
         const ring = k > 0 ? catchment(cell, a, met, k) : null;
-        const html = `<strong>${met.format(cellAgg.value)}</strong> ${met.short}` + (ring != null ? `<br/><span style="color:#606060">${met.format(ring)} en +${k} anillo${k > 1 ? "s" : ""}</span>` : "");
+        const html = `<strong>${met.format(cellAgg.value)}</strong> ${met.short} en este hexágono`
+          + (ring != null ? `<br/><strong>${met.format(ring)}</strong> en la zona <span style="color:#606060">(${zoneLabel(k)})</span>` : "");
         if (!popupRef.current) popupRef.current = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
         popupRef.current.setLngLat(e.lngLat).setHTML(html).addTo(m);
       });
@@ -180,7 +181,7 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
         if (placed.some((b) => box.x < b.x + b.w + 4 && box.x + box.w + 4 > b.x && box.y < b.y + b.h + 2 && box.y + box.h + 2 > b.y)) continue;
         placed.push(box);
         const el = document.createElement("div");
-        el.className = "pointer-events-none select-none whitespace-nowrap rounded-[4px] bg-white/90 px-1.5 py-0.5 text-[11px] font-medium text-carbon tnum shadow-[0_1px_3px_rgba(42,39,38,0.15)]";
+        el.className = "pointer-events-none select-none whitespace-nowrap rounded-field bg-white/90 px-1.5 py-0.5 text-[11px] font-medium text-carbon tnum shadow-ctrl";
         el.textContent = text;
         markersRef.current.push(new maplibregl.Marker({ element: el, anchor: "bottom", offset: [0, -6] }).setLngLat([l.lng, l.lat]).addTo(map));
       }
@@ -216,7 +217,7 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
       <div className="pointer-events-none absolute bottom-6 left-3 z-10">
         <Legend bins={bins} metricShort={metric.short} res={res} />
       </div>
-      <button onClick={fitAll} className="btn btn-light absolute right-3 top-3 z-10 text-[13px] shadow-[0_1px_4px_rgba(42,39,38,0.15)]" title="Encuadrar todos los datos">
+      <button onClick={fitAll} className="btn btn-light t-meta absolute right-3 top-3 z-10 shadow-ctrl" title="Encuadrar todos los datos">
         Ver todo
       </button>
     </div>

@@ -19,6 +19,10 @@ export type MapSeller = {
   lng: number | null;
   h3_r9: string | null;
   geocode_status: string | null;
+  /** Piso / depto inside a shared door. Absent in older fixtures. */
+  unit?: string | null;
+  /** The door's address was corrected by hand in the review screen. */
+  address_edited?: boolean;
 };
 
 export type BatchSummary = {

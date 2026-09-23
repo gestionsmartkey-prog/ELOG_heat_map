@@ -16,6 +16,8 @@ export type MappedRow = {
   city: string | null;
   province: string | null;
   postal_code: string | null;
+  /** Piso / depto / oficina inside the door. Several columns may feed it. */
+  unit: string | null;
   note: string | null;
   lat: number | null;
   lng: number | null;
@@ -49,6 +51,8 @@ export type SellerRecord = {
   parent_external_id: string | null;
   name: string;
   address_key: string | null;
+  /** Piso / depto / PB inside a shared door: two sellers in one building stay apart by it. */
+  unit: string | null;
   source: string;
   opening_hours: string | null;
   phone: string | null;
@@ -97,6 +101,10 @@ export type IngestReport = {
   by_province: Record<string, number>;
   geocoded: number;
   geocode_failed: number;
+  /** Rows that repeated a seller already in the file with identical data. */
+  duplicates_skipped: number;
+  /** Rows without a seller id, identified by name + door + unit instead. */
+  derived_ids: number;
   unmapped_columns: string[];
   warnings: string[];
 };

@@ -29,7 +29,9 @@ export async function importWorkbook(buffer: Buffer, filename: string, opts: Imp
     batch: { filename, file_hash: parsed.file_hash, source: opts.source ?? "meli", uploaded_by: opts.uploaded_by ?? null },
     geocoder: null,
   });
-  if (!result.sellers.length) throw new ImportError("no_ids", "Ninguna fila tiene un identificador de seller. Revisá que la columna «Seller ID» exista.", result.report);
+  // A file where no row has an id is almost always an unrecognized id column. Loading it by name + door
+  // would duplicate every seller once a file with ids arrives, so only the odd id-less row is identified that way.
+  if (!result.sellers.length || result.report.derived_ids === result.report.seller_count) throw new ImportError("no_ids", "Ninguna fila tiene un identificador de seller. Revisá que la columna «Seller ID» exista.", result.report);
 
   if (process.env.DATA_SOURCE === "fixture") return { status: "dry_run", batch_id: null, report: result.report, sheet: parsed.sheet, dry_run: true };
 

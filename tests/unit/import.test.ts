@@ -1,7 +1,12 @@
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import * as XLSX from "xlsx";
 import { importWorkbook, ImportError } from "../../src/lib/import";
+
+// The real 140-row export is client data (gitignored, absent in CI). Run the
+// real-file assertions only where it exists; synthetic-data tests always run.
+const SAMPLE = "data/private/Sellers.xlsx";
+const sampleIt = existsSync(SAMPLE) ? it : it.skip;
 
 const prev = process.env.DATA_SOURCE;
 beforeAll(() => { process.env.DATA_SOURCE = "fixture"; });
@@ -15,8 +20,8 @@ function workbook(rows: Record<string, unknown>[]): Buffer {
 }
 
 describe("importWorkbook", () => {
-  it("runs the sample through the pipeline without touching the database in fixture mode", async () => {
-    const buf = readFileSync("data/private/Sellers.xlsx");
+  sampleIt("runs the sample through the pipeline without touching the database in fixture mode", async () => {
+    const buf = readFileSync(SAMPLE);
     const out = await importWorkbook(buf, "Sellers.xlsx", { uploaded_by: "demo" });
     expect(out.status).toBe("dry_run");
     expect(out.report.row_count).toBe(140);
@@ -39,6 +44,7 @@ describe("importWorkbook", () => {
     const err = await importWorkbook(noIds, "sinid.xlsx").catch((e) => e as ImportError);
     expect(err).toBeInstanceOf(ImportError);
     expect((err as ImportError).code).toBe("no_ids");
-    expect((err as ImportError).report?.review_count).toBe(1);
+    // The row itself is identified by name + door; the file is refused because no row had an id.
+    expect((err as ImportError).report?.derived_ids).toBe(1);
   });
 });

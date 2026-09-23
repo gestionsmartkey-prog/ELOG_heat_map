@@ -28,7 +28,40 @@
   --radius-field: 4px;   /* campos, chips chicos */
   --radius-button: 8px;  /* botones, tarjetas chicas */
   --radius-card: 16px;   /* tarjetas, tablas, contenedores */
-  --radius-pill: 999px;  /* píldoras y etiquetas de estado */
+  --radius-panel: 32px;  /* bloques grandes de color / paneles (manual: 32–64) */
+  --radius-pill: 999px;  /* píldoras y etiquetas de estado. Máx. dos radios por pieza */
+
+  /* Elevación (una sola fuente para todas las sombras) → shadow-ctrl / shadow-card / shadow-pop / shadow-modal */
+  --shadow-ctrl: 0 1px 4px rgba(42, 39, 38, 0.15);
+  --shadow-card: 0 2px 8px rgba(42, 39, 38, 0.12);
+  --shadow-pop: 0 2px 12px rgba(42, 39, 38, 0.15);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.25);
+
+  /* Breakpoints: móvil (base) · tablet (md ≥768) · escritorio (lg ≥1024) */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+}
+
+/* Dimensiones de layout (tokens, no valores sueltos) */
+:root {
+  --size-logo: 30px;        /* alto del logo en la barra */
+  --size-logo-lg: 42px;     /* logo en pantallas de acceso */
+  --panel-w: 34%;           /* panel lateral en escritorio */
+  --panel-min: 300px;
+  --panel-max: 440px;
+  --panel-sheet-max: 78dvh; /* alto máx. del panel como hoja inferior en móvil */
+  --queue-w: 380px;         /* lista de la cola de revisión en escritorio */
+  --gutter: 1rem;           /* margen lateral de página en móvil (= space-2) */
+  --gutter-lg: 1.5rem;      /* margen lateral en escritorio (= space-3) */
+
+  /* Espaciado — escala del manual (base 8): 8 · 16 · 24 · 40 · 64 · 96. Sin valores intermedios. */
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 40px;
+  --space-5: 64px;
+  --space-6: 96px;
 }
 
 html, body { height: 100%; }
@@ -46,6 +79,9 @@ body {
 .t-dato { font-family: var(--font-sans); font-weight: 600; font-size: 14px; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .t-etiqueta { font-family: var(--font-display); font-weight: 600; font-size: 12px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; }
 .t-display { font-family: var(--font-display); font-weight: 700; line-height: 1.05; }
+.t-display-lg { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.t-meta { font-size: 14px; line-height: 1.4; }     /* "cuerpo chico" del manual: datos secundarios en listas y tablas */
+.t-micro { font-size: 12px; line-height: 1.2; }    /* "etiqueta" del manual (12): chips, notas al pie */
 .tnum { font-variant-numeric: tabular-nums; }
 
 /* Controles */
@@ -73,6 +109,15 @@ body {
 .maplibregl-ctrl-group { border-radius: var(--radius-button) !important; box-shadow: 0 1px 4px rgba(42,39,38,0.15) !important; }
 .maplibregl-ctrl-group button { width: 32px; height: 32px; }
 .maplibregl-ctrl-attrib { font-family: var(--font-sans); font-size: 10px; }
+
+/* Mobile bottom-sheet grabber (panel de detalle en móvil) */
+.sheet-grabber { width: 36px; height: 4px; border-radius: var(--radius-pill); background: var(--color-gris-400); }
+
+/* Touch: agrandá los blancos de toque en punteros gruesos sin engordar el escritorio */
+@media (pointer: coarse) {
+  .btn { padding-top: 9px; padding-bottom: 9px; }
+  .field, .select-dark { padding-top: 10px; padding-bottom: 10px; }
+}
 
 /* Draggable review pin */
 .review-pin { width: 22px; height: 30px; cursor: grab; filter: drop-shadow(0 2px 3px rgba(42,39,38,0.35)); }

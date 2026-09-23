@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run",
     "test:e2e": "node tests/e2e/smoke.mjs",
+    "test:responsive": "node tests/e2e/responsive.mjs",
     "ingest": "tsx scripts/ingest.ts",
     "export:fixture": "tsx scripts/export-fixture.ts",
     "mint:admin": "tsx scripts/mint-admin-token.ts"
