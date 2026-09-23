@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { classifySeller } from "../../src/ingest/classify";
 import { parseNote, noteConflictsWithAddress } from "../../src/ingest/note";
-import { addressKey, normalizePostalCode, normalizeProvince, normalizeStreet, normalizeStreetNumber, provinceFromPostalCode } from "../../src/ingest/normalize";
+import { addressKey, normalizePostalCode, normalizeProvince, normalizeStreet, normalizeStreetNumber, normalizeUnit, provinceFromPostalCode } from "../../src/ingest/normalize";
 import { mapRow } from "../../src/ingest/headers";
-import { runPipeline } from "../../src/ingest/pipeline";
+import { derivedSellerId, runPipeline, sellerFingerprint } from "../../src/ingest/pipeline";
 import { toSql } from "../../src/ingest/loaders/sql";
 
 describe("classifySeller", () => {
@@ -127,5 +127,59 @@ describe("auth credentials", () => {
     expect(checkEnvCredentials("anyone", "shared")).toEqual({ user: "anyone", role: "viewer" });
     expect(checkEnvCredentials("demo", "shared")).toBeNull(); // named user must use their own password
     delete process.env.APP_ADMINS;
+  });
+});
+
+describe("seller identity and dedupe", () => {
+  const batch = { filename: "t.xlsx", file_hash: "h", source: "meli", uploaded_by: null };
+  const door = { Dirección: "Cabildo", Número: 1234, Barrio: "Belgrano", Provincia: "CABA", "Codigo Postal": 1426 };
+
+  it("keeps different sellers at the same door apart: one location, many sellers", async () => {
+    const r = await runPipeline([
+      { "Seller ID": 10, Nombre: "Piso uno", ...door, Piso: "1" },
+      { "Seller ID": 11, Nombre: "Piso tres", ...door, Piso: "3", Depto: "B" },
+      { "Seller ID": 12, Nombre: "Sin piso", ...door },
+    ], { batch });
+    expect(r.sellers.map((s) => [s.external_id, s.unit])).toEqual([["10", "Piso 1"], ["11", "Piso 3 Depto B"], ["12", null]]);
+    expect(r.locations).toHaveLength(1);
+    expect(r.reviews).toHaveLength(0);
+  });
+
+  it("skips a row repeated with the same data, and flags the same id with different data", async () => {
+    const r = await runPipeline([
+      { "Seller ID": 20, Nombre: "Tienda", ...door },
+      { "Seller ID": 20, Nombre: "TIENDA", ...door },          // same seller, only case differs
+      { "Seller ID": 20, Nombre: "Otra tienda", ...door, Piso: "2" }, // same id, different seller data
+    ], { batch });
+    expect(r.sellers).toHaveLength(1);
+    expect(r.report.duplicates_skipped).toBe(1);
+    expect(r.reviews).toHaveLength(1);
+    expect(r.reviews[0]).toMatchObject({ reason: "duplicate_id", payload: { row_number: 3, first_row: 1, first_name: "Tienda", name: "Otra tienda", unit: "Piso 2" } });
+  });
+
+  it("identifies rows without an id by name + door + unit, stably across files", async () => {
+    const rows = [
+      { Nombre: "Kiosco", ...door, Piso: "PB" },
+      { Nombre: "Kiosco", ...door, Piso: "pb" },   // same trio: same seller
+      { Nombre: "Kiosco", ...door, Piso: "1" },    // another floor: another seller
+      { Nombre: "Almacén", ...door, Piso: "PB" },  // another name: another seller
+    ];
+    const a = await runPipeline(rows, { batch });
+    const b = await runPipeline(rows, { batch });
+    expect(a.sellers).toHaveLength(3);
+    expect(a.report).toMatchObject({ derived_ids: 3, duplicates_skipped: 1 });
+    expect(a.sellers.every((s) => s.external_id.startsWith("sin-id-") && s.kind === "unknown")).toBe(true);
+    expect(b.sellers.map((s) => s.external_id)).toEqual(a.sellers.map((s) => s.external_id));
+    expect(sellerFingerprint("KIOSCO", "cabildo|1234|1426", "pb")).toBe(sellerFingerprint("Kiosco", "cabildo|1234|1426", "PB"));
+    expect(derivedSellerId("x")).toMatch(/^sin-id-[0-9a-f]{12}$/);
+  });
+
+  it("reads the unit from the note when there is no column for it", async () => {
+    const r = await runPipeline([{ "Seller ID": 30, Nombre: "Depto", ...door, "Información Adicional": "Departamento 6" }], { batch });
+    expect(r.sellers[0].unit).toBe("Departamento 6");
+    expect(parseNote("Santa Rosa 2194 (1714) Ituzaingó Buenos Aires Pb Referencia: frente").unit).toBe("PB");
+    expect(parseNote("Piso 3 Dto B, tocar timbre").unit).toBe("Piso 3 Dto B");
+    expect(parseNote("Local de motos, departamento de ventas").unit).toBeNull();
+    expect(normalizeUnit("planta baja")).toBe("PB");
   });
 });

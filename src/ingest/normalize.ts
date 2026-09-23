@@ -89,3 +89,12 @@ export function addressDisplay(street: string | null, number: string | null): st
   if (!street) return "";
   return number && number !== "S/N" ? `${street} ${number}` : `${street} S/N`;
 }
+
+/** "piso 3 dto b" -> "Piso 3 Dto B", "pb" -> "PB". A unit keeps two sellers in one building apart. */
+export function normalizeUnit(raw: string | null | undefined): string | null {
+  if (raw === null || raw === undefined) return null;
+  const s = nfc(String(raw)).replace(/[,;]+$/, "");
+  if (!s) return null;
+  if (/^(pb|planta baja)$/i.test(s)) return "PB";
+  return titleCase(s).replace(/\bPb\b/g, "PB").replace(/\bUf\b/g, "UF");
+}

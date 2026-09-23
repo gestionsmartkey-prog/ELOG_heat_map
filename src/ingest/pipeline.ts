@@ -1,17 +1,31 @@
+import { createHash } from "node:crypto";
 import { latLngToCell } from "h3-js";
 import { mapRow } from "./headers";
 import { classifySeller } from "./classify";
 import { parseNote, noteConflictsWithAddress } from "./note";
 import { rowHash } from "./parse";
 import {
-  addressDisplay, addressKey, nfc, normalizePostalCode, normalizeProvince, normalizeStreet,
-  normalizeStreetNumber, provinceFromPostalCode, titleCase,
+  addressDisplay, addressKey, foldKey, nfc, normalizePostalCode, normalizeProvince, normalizeStreet,
+  normalizeStreetNumber, normalizeUnit, provinceFromPostalCode, titleCase,
 } from "./normalize";
 import type { ChainGeocoder } from "./geocode";
 import { insideAmba } from "./geocode";
 import type { BatchMeta, IngestReport, IngestResult, LocationRecord, RawRow, ReviewRecord, SellerRecord } from "./types";
 
 export const H3_STORE_RES = 9;
+
+/**
+ * What makes two rows the same seller when ids cannot tell: name, door and unit. Two
+ * sellers in one building (different floor or different name) never share a fingerprint.
+ */
+export function sellerFingerprint(name: string | null, addressKey: string | null, unit: string | null): string {
+  return [foldKey(name ?? ""), addressKey ?? "", foldKey(unit ?? "")].join("#");
+}
+
+/** Stable id for a row that came without one, so the next file updates it instead of duplicating it. */
+export function derivedSellerId(fingerprint: string): string {
+  return `sin-id-${createHash("sha1").update(fingerprint).digest("hex").slice(0, 12)}`;
+}
 
 export type PipelineOptions = {
   batch: BatchMeta;
@@ -31,7 +45,10 @@ export async function runPipeline(rawRows: RawRow[], opts: PipelineOptions): Pro
   const locations = new Map<string, LocationRecord>();
   const sellers: SellerRecord[] = [];
   const reviews: ReviewRecord[] = [];
-  const seenIds = new Set<string>();
+  const seenIds = new Map<string, { fingerprint: string; row_number: number; name: string | null; address: string; unit: string | null }>();
+  const seenFingerprints = new Set<string>();
+  let duplicatesSkipped = 0;
+  let derivedIds = 0;
   const byKind: Record<string, number> = {};
   const byProvince: Record<string, number> = {};
 
@@ -41,37 +58,52 @@ export async function runPipeline(rawRows: RawRow[], opts: PipelineOptions): Pro
     const { row, unmapped } = mapRow(r.data);
     unmapped.forEach((u) => unmappedSet.add(u));
 
-    const external_id = row.external_id ? nfc(row.external_id) : null;
     const name = row.name ? nfc(row.name) : null;
-    if (!external_id) {
-      reviews.push({ external_id: null, address_key: null, reason: "missing_id", payload: { row_number: r.row_number, name } });
-      continue;
-    }
-    if (seenIds.has(external_id)) {
-      reviews.push({ external_id, address_key: null, reason: "duplicate_id", payload: { row_number: r.row_number } });
-      continue;
-    }
-    seenIds.add(external_id);
-
-    const { kind, parent } = classifySeller(external_id, name);
-    byKind[kind] = (byKind[kind] ?? 0) + 1;
-
     const street = normalizeStreet(row.street);
     const number = normalizeStreetNumber(row.street_number);
     const postal = normalizePostalCode(row.postal_code);
+    // In CABA the "barrio" column is the locality; in GBA it is usually the localidad and "ciudad" the partido.
+    const locality = row.locality ? titleCase(row.locality) : row.city ? titleCase(row.city) : null;
+    const note = parseNote(row.note);
+    const key = addressKey(street, number, postal, locality);
+    const unit = normalizeUnit(row.unit) ?? note.unit;
+    const fingerprint = sellerFingerprint(name, key, unit);
+
+    let external_id = row.external_id ? nfc(row.external_id) : null;
+    const seen = external_id ? seenIds.get(external_id) : undefined;
+    if (external_id && seen) {
+      // Same id twice: identical data is a repeated row; different data needs a person to decide.
+      if (seen.fingerprint === fingerprint) { duplicatesSkipped++; continue; }
+      reviews.push({ external_id, address_key: null, reason: "duplicate_id", payload: {
+        row_number: r.row_number, name, address: addressDisplay(street, number), unit,
+        first_row: seen.row_number, first_name: seen.name, first_address: seen.address, first_unit: seen.unit,
+      } });
+      continue;
+    }
+    if (!external_id) {
+      if (!name && !key) {
+        reviews.push({ external_id: null, address_key: null, reason: "missing_id", payload: { row_number: r.row_number, name, street: row.street, note: row.note } });
+        continue;
+      }
+      // No id: the seller is who they are by name + door + unit. The same trio again is the same seller.
+      if (seenFingerprints.has(fingerprint)) { duplicatesSkipped++; continue; }
+      external_id = derivedSellerId(fingerprint);
+      derivedIds++;
+    }
+    seenIds.set(external_id, { fingerprint, row_number: r.row_number, name, address: addressDisplay(street, number), unit });
+    seenFingerprints.add(fingerprint);
+
+    const { kind, parent } = classifySeller(external_id.startsWith("sin-id-") ? null : external_id, name);
+    byKind[kind] = (byKind[kind] ?? 0) + 1;
+
     let province = normalizeProvince(row.province);
     const cpProvince = provinceFromPostalCode(postal);
     if (cpProvince && province !== cpProvince) {
       if (province) warnings.push(`row ${r.row_number}: province "${province}" disagrees with postal code ${postal}; using postal code`);
       province = cpProvince;
     }
-    // In CABA the "barrio" column is the locality; in GBA it is usually the localidad and "ciudad" the partido.
-    const locality = row.locality ? titleCase(row.locality) : row.city ? titleCase(row.city) : null;
     const partido = row.city && row.locality && row.city.toLowerCase() !== row.locality.toLowerCase() && !/^caba$|capital/i.test(row.city) ? titleCase(row.city) : null;
     byProvince[province ?? "unknown"] = (byProvince[province ?? "unknown"] ?? 0) + 1;
-
-    const note = parseNote(row.note);
-    const key = addressKey(street, number, postal, locality);
 
     if (!key) {
       reviews.push({ external_id, address_key: null, reason: "missing_address", payload: { row_number: r.row_number, street: row.street, note: row.note } });
@@ -107,6 +139,7 @@ export async function runPipeline(rawRows: RawRow[], opts: PipelineOptions): Pro
       parent_external_id: parent,
       name: name ?? external_id,
       address_key: key,
+      unit,
       source: opts.batch.source,
       opening_hours: note.opening_hours,
       phone: note.phone,
@@ -161,6 +194,8 @@ export async function runPipeline(rawRows: RawRow[], opts: PipelineOptions): Pro
     by_province: byProvince,
     geocoded,
     geocode_failed: failed,
+    duplicates_skipped: duplicatesSkipped,
+    derived_ids: derivedIds,
     unmapped_columns: [...unmappedSet],
     warnings,
   };

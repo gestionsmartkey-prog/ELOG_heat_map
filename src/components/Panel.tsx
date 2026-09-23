@@ -50,7 +50,8 @@ export function Panel({ cell, catchmentValue, catchmentK, metricShort, onClear }
         <h2 className="t-h3 text-carbon">{s.name}</h2>
         <p className="mt-1 text-gris-700">{s.kind_label} · id {s.external_id}</p>
         <dl className="mt-6 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2">
-          <dt className="text-gris-700">Domicilio</dt><dd>{s.address_display ?? "—"}</dd>
+          <dt className="text-gris-700">Domicilio</dt><dd>{s.address_display ?? "—"}{s.address_edited ? <span className="t-micro ml-2 text-gris-700">(corregido a mano)</span> : null}</dd>
+          {s.unit ? <><dt className="text-gris-700">Unidad</dt><dd>{s.unit}</dd></> : null}
           <dt className="text-gris-700">Localidad</dt><dd>{[s.locality, s.partido].filter(Boolean).join(" · ") || "—"}</dd>
           <dt className="text-gris-700">Provincia</dt><dd>{s.province ?? "—"}{s.postal_code ? ` · CP ${s.postal_code}` : ""}</dd>
           {s.opening_hours ? <><dt className="text-gris-700">Horario</dt><dd>{s.opening_hours}</dd></> : null}
@@ -89,6 +90,7 @@ export function Panel({ cell, catchmentValue, catchmentK, metricShort, onClear }
                   <button onClick={() => setSelected(s)} className="w-full rounded-button px-2 py-1 text-left hover:bg-papel">
                     <span className="mr-2 inline-block h-2 w-2 rounded-pill" style={{ background: kindColor(s.kind) }} />
                     {s.name}
+                    {s.unit ? <span className="ml-2 text-carbon">· {s.unit}</span> : null}
                     <span className="ml-2 text-gris-700">{s.kind_label}</span>
                   </button>
                 </li>

@@ -47,22 +47,32 @@ on conflict (address_key) do update set
   }
 
   for (const g of groups(result.sellers)) {
-    out.push(`insert into public.sellers (external_id, kind, parent_external_id, name, location_id, source, opening_hours, phone, note_raw, note_address, extra, row_hash, first_batch_id, last_seen_batch_id, active) values
-${g.map((s) => `(${lit(s.external_id)}, ${lit(s.kind)}, ${lit(s.parent_external_id)}, ${lit(s.name)}, (select id from public.locations where address_key = ${lit(s.address_key)}), ${lit(s.source)}, ${lit(s.opening_hours)}, ${lit(s.phone)}, ${lit(s.note_raw)}, ${lit(s.note_address)}, ${lit(s.extra)}, ${lit(s.row_hash)}, ${B}, ${B}, true)`).join(",\n")}
+    out.push(`insert into public.sellers (external_id, kind, parent_external_id, name, location_id, unit, source, opening_hours, phone, note_raw, note_address, extra, row_hash, first_batch_id, last_seen_batch_id, active) values
+${g.map((s) => `(${lit(s.external_id)}, ${lit(s.kind)}, ${lit(s.parent_external_id)}, ${lit(s.name)}, public._location_for_key(${lit(s.address_key)}), ${lit(s.unit)}, ${lit(s.source)}, ${lit(s.opening_hours)}, ${lit(s.phone)}, ${lit(s.note_raw)}, ${lit(s.note_address)}, ${lit(s.extra)}, ${lit(s.row_hash)}, ${B}, ${B}, true)`).join(",\n")}
 on conflict (external_id) do update set
   kind = excluded.kind, parent_external_id = excluded.parent_external_id, name = excluded.name,
-  location_id = coalesce(excluded.location_id, public.sellers.location_id),
+  location_id = case when public.sellers.location_locked then public.sellers.location_id else coalesce(excluded.location_id, public.sellers.location_id) end,
+  unit = excluded.unit,
   opening_hours = coalesce(excluded.opening_hours, public.sellers.opening_hours),
   phone = coalesce(excluded.phone, public.sellers.phone),
-  note_raw = excluded.note_raw, note_address = excluded.note_address,
+  note_raw = excluded.note_raw,
+  note_address = case when public.sellers.location_locked then null else excluded.note_address end,
   extra = public.sellers.extra || excluded.extra,
   row_hash = excluded.row_hash, last_seen_batch_id = excluded.last_seen_batch_id, active = true;`);
   }
 
   if (result.reviews.length) {
+    // Skip reviews a person already saw (open or resolved), as the direct loader does.
     for (const g of groups(result.reviews)) {
-      out.push(`insert into public.review_items (batch_id, seller_id, location_id, reason, payload) values
-${g.map((r) => `(${B}, (select id from public.sellers where external_id = ${lit(r.external_id)}), (select id from public.locations where address_key = ${lit(r.address_key)}), ${lit(r.reason)}, ${lit(r.payload)})`).join(",\n")};`);
+      out.push(`insert into public.review_items (batch_id, seller_id, location_id, reason, payload)
+select v.* from (values
+${g.map((r) => `(${B}, (select id from public.sellers where external_id = ${lit(r.external_id)}), public._location_for_key(${lit(r.address_key)}), ${lit(r.reason)}, ${lit(r.payload)})`).join(",\n")}
+) as v(batch_id, seller_id, location_id, reason, payload)
+where not exists (
+  select 1 from public.review_items x
+  where x.reason = v.reason and x.seller_id is not distinct from v.seller_id and x.location_id is not distinct from v.location_id
+    and (v.reason <> 'address_conflict' or coalesce(x.payload->>'note_address', '') = coalesce(v.payload->>'note_address', ''))
+);`);
     }
   }
 

@@ -44,6 +44,7 @@ describe("importWorkbook", () => {
     const err = await importWorkbook(noIds, "sinid.xlsx").catch((e) => e as ImportError);
     expect(err).toBeInstanceOf(ImportError);
     expect((err as ImportError).code).toBe("no_ids");
-    expect((err as ImportError).report?.review_count).toBe(1);
+    // The row itself is identified by name + door; the file is refused because no row had an id.
+    expect((err as ImportError).report?.derived_ids).toBe(1);
   });
 });

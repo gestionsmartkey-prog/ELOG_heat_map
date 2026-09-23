@@ -51,4 +51,4 @@ node tests/e2e/import.mjs
 
 ## Database changes
 
-Schema changes go in `supabase/migrations/` as a new numbered file, applied to the Supabase project. Never edit an already-applied migration; add a new one. See `README.md` for the ingest and geocoder details.
+Schema and data changes go in `supabase/migrations/` as a new numbered file, in the PR. The Supabase GitHub integration applies pending migrations when the PR merges; **never apply SQL to the project by hand** (dashboard SQL editor, MCP, `psql`), or the migration history drifts from the repo and has to be reconciled. Never edit an already-applied migration; add a new one. Write migrations so they can run twice (`if not exists`, `create or replace`, `on conflict`). See `README.md` for the ingest and geocoder details.

@@ -1,9 +1,11 @@
-import { nfc, normalizePostalCode, normalizeStreet, normalizeStreetNumber, foldKey } from "./normalize";
+import { nfc, normalizePostalCode, normalizeStreet, normalizeStreetNumber, normalizeUnit, foldKey } from "./normalize";
 
 export type ParsedNote = {
   phone: string | null;
   opening_hours: string | null;
   address: { street: string; number: string | null; postal_code: string | null; display: string } | null;
+  /** "Piso 3 Dto 4", "Departamento 6", "PB", "Oficina 2", "Local 5". */
+  unit: string | null;
   remainder: string;
 };
 
@@ -14,6 +16,12 @@ const HOURS_RE = new RegExp(
   "gi",
 );
 // "Soldado De La Independencia 966 (1426) Belgrano ..." or "Av. Warnes 1255 (1414) Villa Crespo CABA"
+// A unit needs a number or a single letter after the keyword, so "Departamento de ventas" or "Local de motos" do not count.
+const FLAT = "(?:dto|dpto|depto|departamento)\\.?\\s*(?:\\d{1,4}[a-z]?\\b|[a-z]\\b)";
+const UNIT_RE = new RegExp(
+  `\\b(?:piso\\s*\\d{1,2}(?:\\s*[°º])?(?:\\s*${FLAT})?|${FLAT}|planta baja|pb\\b|oficina\\s*\\d{1,4}\\b|of\\.\\s*\\d{1,4}\\b|uf\\s*\\d{1,4}\\b|local\\s*\\d{1,4}\\b)`,
+  "i",
+);
 const ADDRESS_RE = /^\s*([A-Za-zÁ-ÿ'.\-\s]{3,}?)\s+(\d{1,5}|s\/n)\s*\((\d{4})\)/i;
 
 /**
@@ -21,7 +29,7 @@ const ADDRESS_RE = /^\s*([A-Za-zÁ-ÿ'.\-\s]{3,}?)\s+(\d{1,5}|s\/n)\s*\((\d{4})\
  * delivery notes. We pull out what we can and keep the rest verbatim.
  */
 export function parseNote(raw: string | null | undefined): ParsedNote {
-  if (!raw) return { phone: null, opening_hours: null, address: null, remainder: "" };
+  if (!raw) return { phone: null, opening_hours: null, address: null, unit: null, remainder: "" };
   let text = nfc(raw);
 
   let phone: string | null = null;
@@ -56,7 +64,10 @@ export function parseNote(raw: string | null | undefined): ParsedNote {
     }
   }
 
-  return { phone, opening_hours, address, remainder: nfc(text.replace(/\s+-\s+/g, " ")) };
+  const unitMatch = text.match(UNIT_RE);
+  const unit = unitMatch ? normalizeUnit(unitMatch[0]) : null;
+
+  return { phone, opening_hours, address, unit, remainder: nfc(text.replace(/\s+-\s+/g, " ")) };
 }
 
 function lastToken(s: string): string {
