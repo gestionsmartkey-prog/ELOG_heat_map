@@ -19,7 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   try {
     const by = (await getSession())?.user ?? "desconocido";
-    const result = await resolveReview(numId, action, { lat: body.lat, lng: body.lng, address: body.address, provider: body.provider }, by);
+    const result = await resolveReview(numId, action, { lat: body.lat, lng: body.lng, address: body.address, provider: body.provider, seller_ids: body.seller_ids }, by);
     if (!result.ok) return NextResponse.json(result, { status: 422 });
     return NextResponse.json(result);
   } catch (e) {
