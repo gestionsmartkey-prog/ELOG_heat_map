@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { METRICS } from "@/lib/metrics";
+import { zoneLabel } from "@/lib/hexes";
 import type { SellersResponse } from "@/lib/types";
 
 type Props = {
@@ -82,11 +83,9 @@ export function TopBar({ data, metricId, onMetric, enabledKinds, onToggleKind, c
         </div>
 
         <label className="flex items-center gap-2">
-          <span className="t-meta text-white/80">Alcance</span>
-          <select value={catchmentK} onChange={(e) => onCatchment(Number(e.target.value))} className="select-dark max-md:flex-1">
-            <option value={0}>solo el hexágono</option>
-            <option value={1}>+1 anillo</option>
-            <option value={2}>+2 anillos</option>
+          <span className="t-meta text-white/80" title="Cuántos hexágonos de alrededor se suman al total de la zona">Zona</span>
+          <select value={catchmentK} onChange={(e) => onCatchment(Number(e.target.value))} className="select-dark max-md:flex-1" data-testid="zone-select">
+            {[0, 1, 2].map((k) => <option key={k} value={k}>{zoneLabel(k)}</option>)}
           </select>
         </label>
       </div>

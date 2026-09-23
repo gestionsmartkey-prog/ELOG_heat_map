@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { MapSeller } from "@/lib/types";
-import type { CellAgg } from "@/lib/hexes";
+import { neighbourCount, type CellAgg } from "@/lib/hexes";
 
 type Props = {
   cell: CellAgg | null;
@@ -75,8 +75,11 @@ export function Panel({ cell, catchmentValue, catchmentK, metricShort, onClear }
         <div className="mt-4 grid grid-cols-3 gap-2">
           <Stat label={metricShort} value={cell.value} />
           <Stat label="domicilios" value={groups.length} />
-          <Stat label={catchmentK ? `${metricShort} en +${catchmentK}` : "alcance"} value={catchmentK ? catchmentValue ?? 0 : null} />
+          <Stat label="en la zona" value={catchmentK ? catchmentValue ?? 0 : null} />
         </div>
+        <p className="t-micro mt-2 text-gris-700" data-testid="zone-note">
+          {catchmentK ? `Zona = este hexágono + los ${neighbourCount(catchmentK)} que lo rodean.` : "Elegí una zona en los filtros para sumar los hexágonos vecinos."}
+        </p>
       </div>
       <ul className="flex-1 divide-y divide-gris-200 overflow-y-auto" data-testid="door-list">
         {groups.map((g) => (
