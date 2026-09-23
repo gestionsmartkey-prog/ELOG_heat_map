@@ -25,10 +25,12 @@ type Props = {
   onMove: (lng: number, lat: number) => void;
   /** Bumps whenever a new review item is selected, so the map recenters on it. */
   focusKey: string;
+  /** Screen space covered by the floating card, read when recentering, so the pin lands where it can be seen. */
+  getInset?: () => { top: number; bottom: number; left: number; right: number };
 };
 
 /** A single draggable marker on a basemap. The reviewer drags it onto the real door. */
-export function ReviewMap({ pin, onMove, focusKey }: Props) {
+export function ReviewMap({ pin, onMove, focusKey, getInset }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const markerRef = useRef<maplibregl.Marker | null>(null);
@@ -36,6 +38,8 @@ export function ReviewMap({ pin, onMove, focusKey }: Props) {
   useEffect(() => { onMoveRef.current = onMove; }, [onMove]);
   const pinRef = useRef(pin);
   useEffect(() => { pinRef.current = pin; }, [pin]);
+  const insetRef = useRef(getInset);
+  useEffect(() => { insetRef.current = getInset; }, [getInset]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -63,7 +67,8 @@ export function ReviewMap({ pin, onMove, focusKey }: Props) {
     const map = mapRef.current, marker = markerRef.current;
     if (!map || !marker) return;
     marker.setLngLat(pin);
-    map.flyTo({ center: pin, zoom: 15, duration: 600 });
+    const padding = insetRef.current?.() ?? { top: 0, bottom: 0, left: 0, right: 0 };
+    map.flyTo({ center: pin, zoom: 15, duration: 600, padding });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusKey]);
 

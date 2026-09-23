@@ -183,3 +183,16 @@ describe("seller identity and dedupe", () => {
     expect(normalizeUnit("planta baja")).toBe("PB");
   });
 });
+
+describe("note address locality", () => {
+  it("reads the locality and province that follow the postal code", () => {
+    expect(parseNote("Estrada 1921 (1650) Villa Maipú Buenos Aires Empresa Shipnow Referencia: x").address).toMatchObject({ display: "Estrada 1921", postal_code: "1650", locality: "Villa Maipú", province: "Buenos Aires" });
+    expect(parseNote("Soldado De La Independencia 966 (1426) Belgrano Belgrano CABA Local").address).toMatchObject({ locality: "Belgrano", province: "CABA" });
+    expect(parseNote("Scalabrini Ortiz 561 (1414) CABA CABA").address).toMatchObject({ locality: null, province: "CABA" });
+  });
+
+  it("keeps the note's locality on the address conflict it raises", async () => {
+    const r = await runPipeline([{ "Seller ID": 40, Nombre: "M", Dirección: "De los Constituyentes", Número: 2985, Barrio: "La Paternal", Provincia: "CABA", "Codigo Postal": 1427, "Información Adicional": "Estrada 1921 (1650) Villa Maipú Buenos Aires Referencia: predio" }], { batch: { filename: "t", file_hash: "h", source: "meli", uploaded_by: null } });
+    expect(r.reviews[0]).toMatchObject({ reason: "address_conflict", payload: { note_address: "Estrada 1921", note_locality: "Villa Maipú", note_province: "Buenos Aires" } });
+  });
+});

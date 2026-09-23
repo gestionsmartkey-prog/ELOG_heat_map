@@ -52,6 +52,7 @@
   --panel-max: 440px;
   --panel-sheet-max: 78dvh; /* alto máx. del panel como hoja inferior en móvil */
   --queue-w: 380px;         /* lista de la cola de revisión en escritorio */
+  --review-card-w: 460px;   /* tarjeta de revisión acoplada a la derecha del mapa en escritorio */
   --gutter: 1rem;           /* margen lateral de página en móvil (= space-2) */
   --gutter-lg: 1.5rem;      /* margen lateral en escritorio (= space-3) */
 
@@ -80,8 +81,8 @@ body {
 .t-etiqueta { font-family: var(--font-display); font-weight: 600; font-size: 12px; line-height: 1.2; letter-spacing: 0.08em; text-transform: uppercase; }
 .t-display { font-family: var(--font-display); font-weight: 700; line-height: 1.05; }
 .t-display-lg { font-family: var(--font-display); font-weight: 700; font-size: 28px; line-height: 1.05; font-variant-numeric: tabular-nums; }
-.t-meta { font-size: 14px; line-height: 1.4; }     /* "cuerpo chico" del manual: datos secundarios en listas y tablas */
-.t-micro { font-size: 12px; line-height: 1.2; }    /* "etiqueta" del manual (12): chips, notas al pie */
+.t-meta { font-size: 14px; line-height: 1.5; }     /* "cuerpo chico" del manual: datos secundarios en listas y tablas */
+.t-micro { font-size: 12px; line-height: 1.45; }    /* "etiqueta" del manual (12): chips, notas al pie */
 .tnum { font-variant-numeric: tabular-nums; }
 
 /* Controles */
@@ -92,6 +93,11 @@ body {
 .btn-ghost:hover { border-color: #fff; }
 .btn-light { background: #fff; color: var(--color-grafito); border: 1px solid var(--color-gris-200); }
 .btn-light:hover { border-color: var(--color-gris-400); }
+/* Deshabilitado se ve deshabilitado: atenuado, sin hover, cursor de no permitido */
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-primary:disabled:hover { background: var(--color-grafito); }
+.btn-light:disabled:hover { border-color: var(--color-gris-200); }
+.btn-ghost:disabled:hover { border-color: rgba(255,255,255,0.35); }
 .field { font-family: var(--font-sans); border-radius: var(--radius-field); border: 1px solid var(--color-gris-400); background: #fff; color: var(--color-carbon); padding: 8px 10px; }
 .field:focus { outline: none; border-color: var(--color-grafito); box-shadow: 0 0 0 2px rgba(63,62,62,0.15); }
 .select-dark { font-family: var(--font-sans); border-radius: var(--radius-field); border: 1px solid rgba(255,255,255,0.35); background: var(--color-grafito); color: #fff; padding: 4px 8px; }

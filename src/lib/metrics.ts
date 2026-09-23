@@ -7,7 +7,9 @@ import type { MapSeller } from "./types";
 export type Metric = {
   id: string;
   label: string;
+  /** Plural and singular unit, for "2 sellers" / "1 seller". */
   short: string;
+  one: string;
   reduce: (rows: MapSeller[]) => number;
   format: (v: number) => string;
 };
@@ -17,6 +19,7 @@ export const METRICS: Metric[] = [
     id: "seller_count",
     label: "Cantidad de sellers",
     short: "sellers",
+    one: "seller",
     reduce: (rows) => rows.length,
     format: (v) => String(v),
   },
@@ -24,6 +27,7 @@ export const METRICS: Metric[] = [
     id: "location_count",
     label: "Cantidad de domicilios",
     short: "domicilios",
+    one: "domicilio",
     reduce: (rows) => new Set(rows.map((r) => r.location_id ?? r.id)).size,
     format: (v) => String(v),
   },

@@ -1,9 +1,14 @@
-import { nfc, normalizePostalCode, normalizeStreet, normalizeStreetNumber, normalizeUnit, foldKey } from "./normalize";
+import { nfc, normalizePostalCode, normalizeProvince, normalizeStreet, normalizeStreetNumber, normalizeUnit, foldKey, titleCase } from "./normalize";
 
 export type ParsedNote = {
   phone: string | null;
   opening_hours: string | null;
-  address: { street: string; number: string | null; postal_code: string | null; display: string } | null;
+  address: {
+    street: string; number: string | null; postal_code: string | null; display: string;
+    /** "Villa Maipú" from "Estrada 1921 (1650) Villa Maipú Buenos Aires …"; null when only the province follows. */
+    locality: string | null;
+    province: string | null;
+  } | null;
   /** "Piso 3 Dto 4", "Departamento 6", "PB", "Oficina 2", "Local 5". */
   unit: string | null;
   remainder: string;
@@ -22,6 +27,8 @@ const UNIT_RE = new RegExp(
   `\\b(?:piso\\s*\\d{1,2}(?:\\s*[°º])?(?:\\s*${FLAT})?|${FLAT}|planta baja|pb\\b|oficina\\s*\\d{1,4}\\b|of\\.\\s*\\d{1,4}\\b|uf\\s*\\d{1,4}\\b|local\\s*\\d{1,4}\\b)`,
   "i",
 );
+// What follows the postal code: "Villa Maipú Buenos Aires …", "Belgrano Belgrano CABA …", "CABA CABA".
+const AFTER_CP_RE = /^\s*(.*?)\s*\b(caba|capital federal|buenos aires)\b/i;
 const ADDRESS_RE = /^\s*([A-Za-zÁ-ÿ'.\-\s]{3,}?)\s+(\d{1,5}|s\/n)\s*\((\d{4})\)/i;
 
 /**
@@ -55,11 +62,14 @@ export function parseNote(raw: string | null | undefined): ParsedNote {
     const street = normalizeStreet(addr[1]);
     if (street) {
       const number = normalizeStreetNumber(addr[2]);
+      const after = text.slice((addr.index ?? 0) + addr[0].length).match(AFTER_CP_RE);
       address = {
         street,
         number,
         postal_code: normalizePostalCode(addr[3]),
         display: number && number !== "S/N" ? `${street} ${number}` : `${street} S/N`,
+        locality: after ? noteLocality(after[1]) : null,
+        province: after ? normalizeProvince(after[2]) : null,
       };
     }
   }
@@ -104,4 +114,13 @@ export function noteConflictsWithAddress(
   if (a === b) return false;
   if (editDistance(a, b) <= 2 && Math.min(a.length, b.length) >= 5) return false;
   return true;
+}
+
+/** "Belgrano Belgrano" -> "Belgrano" (exports repeat barrio and localidad); "" -> null. */
+function noteLocality(raw: string): string | null {
+  const words = nfc(raw).split(" ").filter(Boolean);
+  if (!words.length || words.length > 5) return null;
+  const half = words.length / 2;
+  const deduped = Number.isInteger(half) && foldKey(words.slice(0, half).join(" ")) === foldKey(words.slice(half).join(" ")) ? words.slice(0, half) : words;
+  return titleCase(deduped.join(" "));
 }

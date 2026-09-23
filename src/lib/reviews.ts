@@ -4,6 +4,7 @@ import {
   addressDisplay, addressKey, normalizePostalCode, normalizeProvince, normalizeStreet, normalizeStreetNumber,
   provinceFromPostalCode, titleCase,
 } from "@/ingest/normalize";
+import { parseNote } from "@/ingest/note";
 
 const H3_RES = 9;
 // Generous AMBA envelope; a manual pin must still land in the metro region.
@@ -21,8 +22,12 @@ export type ReviewItem = {
     address_edited: boolean;
     /** Sellers at this door: correcting the door's address changes it for all of them. */
     seller_count: number;
+    sellers: DoorSeller[];
   } | null;
 };
+
+/** A seller sharing the door, so a correction or a move is never done blind. */
+export type DoorSeller = { id: string; name: string; external_id: string; unit: string | null; note_address: string | null };
 
 export async function listReviews(): Promise<ReviewItem[]> {
   const sb = supabaseAdmin();
@@ -39,13 +44,29 @@ export async function listReviews(): Promise<ReviewItem[]> {
     return { id: rec.id as number, reason: rec.reason as string, payload: (rec.payload as Record<string, unknown>) ?? {}, created_at: rec.created_at as string, seller: one(rec.seller), location: one(rec.location) } as ReviewItem;
   });
   const locIds = [...new Set(items.map((i) => i.location?.id).filter(Boolean) as string[])];
-  const counts = new Map<string, number>();
+  const byDoor = new Map<string, DoorSeller[]>();
+  const notes = new Map<string, string | null>();
   for (let i = 0; i < locIds.length; i += 200) {
-    const { data: rows, error: cErr } = await sb.from("sellers").select("location_id").in("location_id", locIds.slice(i, i + 200));
-    if (cErr) throw new Error(`sellers count: ${cErr.message}`);
-    for (const row of rows ?? []) { const id = (row as { location_id: string }).location_id; counts.set(id, (counts.get(id) ?? 0) + 1); }
+    const { data: rows, error: cErr } = await sb.from("sellers").select("id,name,external_id,unit,note_address,note_raw,location_id")
+      .in("location_id", locIds.slice(i, i + 200)).order("name");
+    if (cErr) throw new Error(`door sellers: ${cErr.message}`);
+    for (const row of (rows ?? []) as (DoorSeller & { location_id: string; note_raw: string | null })[]) {
+      const { location_id, note_raw, ...seller } = row;
+      notes.set(seller.id, note_raw);
+      byDoor.set(location_id, [...(byDoor.get(location_id) ?? []), seller]);
+    }
   }
-  for (const it of items) if (it.location) it.location.seller_count = counts.get(it.location.id) ?? 0;
+  for (const it of items) {
+    if (it.location) {
+      it.location.sellers = byDoor.get(it.location.id) ?? [];
+      it.location.seller_count = it.location.sellers.length;
+    }
+    // Conflicts loaded before the note's locality was kept: read it from the note now, so the form is prefilled.
+    if (it.reason === "address_conflict" && it.seller && it.payload.note_locality === undefined) {
+      const a = parseNote(notes.get(it.seller.id) ?? null).address;
+      if (a) it.payload = { ...it.payload, note_locality: a.locality, note_province: a.province };
+    }
+  }
   return items;
 }
 
@@ -85,8 +106,9 @@ export async function lookupAddress(a: NormalizedAddress): Promise<LookupResult 
 }
 
 export type ResolveAction = "locate" | "dismiss" | "retry" | "correct" | "move_seller";
-export type ResolveResult = { ok: true; action: ResolveAction; status?: string; location_id?: string } | { ok: false; error: string; message: string };
-export type ResolveBody = { lat?: number; lng?: number; address?: AddressInput; provider?: string };
+export type ResolveResult = { ok: true; action: ResolveAction; status?: string; location_id?: string; moved?: number } | { ok: false; error: string; message: string };
+/** seller_ids: for move_seller, the sellers of this door to move together (defaults to the item's seller). */
+export type ResolveBody = { lat?: number; lng?: number; address?: AddressInput; provider?: string; seller_ids?: unknown };
 
 export async function resolveReview(id: number, action: ResolveAction, body: ResolveBody, by: string): Promise<ResolveResult> {
   const sb = supabaseAdmin();
@@ -131,9 +153,21 @@ export async function resolveReview(id: number, action: ResolveAction, body: Res
       return { ok: true, action, location_id: data as string };
     }
     if (!sellerId) return { ok: false, error: "no_seller", message: "El ítem no está asociado a un seller." };
-    const { data, error } = await sb.rpc("move_seller", { p_seller_id: sellerId, ...args });
-    if (error) throw new Error(`move_seller: ${error.message}`);
-    return { ok: true, action, location_id: data as string };
+    const requested = Array.isArray(body.seller_ids) ? body.seller_ids.filter((v): v is string => typeof v === "string") : [];
+    const ids = [...new Set([sellerId, ...requested])];
+    if (ids.length > 1) {
+      // Only sellers of this item's own door can ride along.
+      const { data: same, error: sErr } = await sb.from("sellers").select("id").in("id", ids).eq("location_id", locationId ?? "");
+      if (sErr) throw new Error(`move check: ${sErr.message}`);
+      if ((same ?? []).length !== ids.length) return { ok: false, error: "bad_sellers", message: "Algún seller elegido no está en este domicilio." };
+    }
+    let target: string | null = null;
+    for (const sid of ids) {
+      const { data, error } = await sb.rpc("move_seller", { p_seller_id: sid, ...args, p_review_id: sid === sellerId ? id : null });
+      if (error) throw new Error(`move_seller: ${error.message}`);
+      target = data as string;
+    }
+    return { ok: true, action, location_id: target ?? undefined, moved: ids.length };
   }
 
   // locate: place a manual pin, address text unchanged
