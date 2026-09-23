@@ -1,4 +1,4 @@
--- 0007: seller kind labels and brand colours, as they are in production.
+-- seller kind labels and brand colours, as they are in production.
 -- 0001 seeded the first draft; this brings a fresh database (or a preview branch) to the same state.
 update public.seller_kinds k set label = v.label, color = v.color
 from (values
