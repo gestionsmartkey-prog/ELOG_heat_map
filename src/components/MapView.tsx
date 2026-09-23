@@ -6,7 +6,7 @@ import type { LngLatBoundsLike, Map as MLMap, MapMouseEvent } from "maplibre-gl"
 import { cellToLatLng } from "h3-js";
 import type { MapSeller } from "@/lib/types";
 import type { Metric } from "@/lib/metrics";
-import { aggregate, catchment, computeBins, pointsGeoJSON, resolutionForZoom, toGeoJSON, type Bin, type CellAgg } from "@/lib/hexes";
+import { aggregate, catchment, computeBins, pointsGeoJSON, resolutionForZoom, toGeoJSON, zoneLabel, type Bin, type CellAgg } from "@/lib/hexes";
 import { Legend } from "./Legend";
 
 const BASEMAP = process.env.NEXT_PUBLIC_BASEMAP_STYLE ?? "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
@@ -131,7 +131,8 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
         const cellAgg = a.get(cell);
         if (!cellAgg) return;
         const ring = k > 0 ? catchment(cell, a, met, k) : null;
-        const html = `<strong>${met.format(cellAgg.value)}</strong> ${met.short}` + (ring != null ? `<br/><span style="color:#606060">${met.format(ring)} en +${k} anillo${k > 1 ? "s" : ""}</span>` : "");
+        const html = `<strong>${met.format(cellAgg.value)}</strong> ${met.short} en este hexágono`
+          + (ring != null ? `<br/><strong>${met.format(ring)}</strong> en la zona <span style="color:#606060">(${zoneLabel(k)})</span>` : "");
         if (!popupRef.current) popupRef.current = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
         popupRef.current.setLngLat(e.lngLat).setHTML(html).addTo(m);
       });

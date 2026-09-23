@@ -31,6 +31,16 @@ export function aggregate(sellers: MapSeller[], res: number, metric: Metric): Ma
   return out;
 }
 
+/** Hexágonos vecinos dentro de k anillos, sin contar el central (k=1 → 6, k=2 → 18). */
+export function neighbourCount(k: number): number {
+  return 3 * k * (k + 1);
+}
+
+/** Cómo se nombra la zona en la interfaz: "este + 6 vecinos". */
+export function zoneLabel(k: number): string {
+  return k > 0 ? `este + ${neighbourCount(k)} vecinos` : "solo este hexágono";
+}
+
 /** Sum of a metric over a cell and its k-ring neighbours: the catchment a hub there would serve. */
 export function catchment(cell: string, agg: Map<string, CellAgg>, metric: Metric, k: number): number {
   const rows: MapSeller[] = [];
