@@ -196,3 +196,64 @@ describe("note address locality", () => {
     expect(r.reviews[0]).toMatchObject({ reason: "address_conflict", payload: { note_address: "Estrada 1921", note_locality: "Villa Maipú", note_province: "Buenos Aires" } });
   });
 });
+
+describe("locality-level file (public profiles, no street)", () => {
+  const batch = { filename: "mapa-flex-sellers_2026-10-08.xlsx", file_hash: "h3", source: "ml_publico", uploaded_by: null };
+  const base = { Provincia: "Ciudad Autónoma de Buenos Aires", Zona: "CABA", "CP de referencia": "1430", "Cobertura Flex": "confirmada", Reputacion: "5_green" };
+  const rows = [
+    { Vendedor: "BIDCOM STORES", "ID vendedor": "37133205", "Localidad (perfil)": "Villa Ortúzar", Localidad: "Villa Ortúzar", "Partido / Comuna": "Comuna 15", ...base, Latitud: "-34.5786713", Longitud: "-58.4694820", "Precision de ubicacion": "localidad", "Candidato Flex": "si", "Envios/mes (est.)": "138895", "Tendencia interanual": "crece", "Power seller": "platinum", Categorias: "Computación; Hogar", Perfil: "http://perfil.mercadolibre.com.ar/BIDCOM+STORES" },
+    { Vendedor: "Otra tienda", "ID vendedor": "100", Localidad: "Villa Ortúzar", "Partido / Comuna": "Comuna 15", ...base, Latitud: "-34.5786713", Longitud: "-58.4694820", "Precision de ubicacion": "localidad", "Candidato Flex": null, "Envios/mes (est.)": "12" },
+    { Vendedor: "Rosarina", "ID vendedor": "200", Localidad: "Rosario", "Partido / Comuna": "Rosario", Provincia: "Santa Fe", Zona: "Santa Fe", "CP de referencia": "2000", Latitud: "-32.9468", Longitud: "-60.6393", "Precision de ubicacion": "localidad", "Candidato Flex": "probable", "Envios/mes (est.)": "30" },
+    { Vendedor: "Del partido", "ID vendedor": "300", Localidad: null, "Partido / Comuna": "Tigre", Provincia: "Buenos Aires", Zona: "GBA Norte", "CP de referencia": null, Latitud: "-34.42", Longitud: "-58.58", "Precision de ubicacion": "partido", "Envios/mes (est.)": "5" },
+    { Vendedor: "Sin localidad", "ID vendedor": "400", Localidad: null, Provincia: "Córdoba", Zona: "Córdoba", Latitud: "-31.4", Longitud: "-64.2", "Precision de ubicacion": "provincia", "Envios/mes (est.)": "1" },
+  ];
+
+  it("loads located rows as approximate locations, one per area, and sends province-level rows to review", async () => {
+    const r = await runPipeline(rows, { batch });
+    expect(r.sellers).toHaveLength(5);
+    expect(r.locations).toHaveLength(3); // Villa Ortúzar (x2), Rosario, Tigre
+    expect(r.locations.map((l) => l.precision).sort()).toEqual(["locality", "locality", "partido"]);
+    expect(r.locations.every((l) => l.address_key.startsWith("~") && l.street === null && l.postal_code === null && l.geocode_status === "ok")).toBe(true);
+    expect(r.reviews.map((x) => x.reason)).toEqual(["approximate_location"]);
+    expect(r.reviews[0].external_id).toBe("400");
+    expect(r.report.by_precision).toEqual({ locality: 2, partido: 1 });
+    expect(r.sellers.find((s) => s.external_id === "400")?.address_key).toBeNull();
+  });
+
+  it("does not let the reference postal code relabel the province (Rosario CP 2000 stays Santa Fe)", async () => {
+    const r = await runPipeline(rows, { batch });
+    const rosario = r.locations.find((l) => l.locality === "Rosario");
+    expect(rosario?.province).toBe("Santa Fe");
+    expect(r.report.warnings).toEqual([]);
+    expect(r.locations.find((l) => l.locality === "Villa Ortúzar")?.province).toBe("CABA");
+  });
+
+  it("keeps the reference postal code out of postal_code and out of the key; filters go to attrs, the rest to extra", async () => {
+    const r = await runPipeline(rows, { batch });
+    const b = r.sellers.find((s) => s.external_id === "37133205");
+    expect(b?.attrs).toEqual({ flex_candidate: "si", flex_coverage: "confirmada", reputation: "5_green", power_seller: "platinum", trend: "crece", zone: "caba" });
+    expect(b?.extra).toMatchObject({ reference_postal_code: "1430", categories: "Computación; Hogar", profile_url: "http://perfil.mercadolibre.com.ar/BIDCOM+STORES" });
+    expect(r.locations.some((l) => l.address_key.includes("1430"))).toBe(false);
+    expect(r.report.unmapped_columns).toEqual(["Localidad (perfil)"]);
+  });
+
+  it("writes shipments per month as a metric dated by the file snapshot", async () => {
+    const r = await runPipeline(rows, { batch });
+    expect(r.metrics).toContainEqual({ external_id: "37133205", metric: "shipments_month", period: "2026-10-08", value: 138895 });
+    expect(r.metrics).toHaveLength(5);
+  });
+
+  it("leaves street-level files alone: coordinates without a precision column still need a street", async () => {
+    const r = await runPipeline([{ "Seller ID": 9, Nombre: "X", Barrio: "Belgrano", Provincia: "CABA", lat: -34.56, lng: -58.45 }], { batch: { ...batch, source: "meli" } });
+    expect(r.locations).toHaveLength(0);
+    expect(r.reviews.map((x) => x.reason)).toEqual(["missing_address"]);
+  });
+
+  it("the SQL loader writes precision, attributes and metrics, and never downgrades a location", async () => {
+    const sql = toSql(await runPipeline(rows, { batch }));
+    expect(sql).toContain("insert into public.seller_metrics");
+    expect(sql).toContain("public._pick_location(public.sellers.location_id, excluded.location_id)");
+    expect(sql).toMatch(/insert into public\.locations \(address_key, precision,/);
+    expect(sql).toContain("attrs = public.sellers.attrs || excluded.attrs");
+  });
+});

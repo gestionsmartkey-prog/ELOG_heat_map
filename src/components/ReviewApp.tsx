@@ -24,7 +24,7 @@ type Lookup = { state: "idle" | "busy" | "found" | "missing" | "error"; message?
 const AMBA_CENTER: [number, number] = [-58.55, -34.62];
 const REASONS: Record<string, string> = {
   geocode_failed: "Sin geolocalizar", address_conflict: "Dirección en conflicto", outside_region: "Fuera de zona",
-  duplicate_id: "ID repetido en el archivo", missing_address: "Sin dirección", missing_id: "Fila sin ID",
+  duplicate_id: "ID repetido en el archivo", missing_address: "Sin dirección", approximate_location: "Ubicación solo por provincia", missing_id: "Fila sin ID",
 };
 
 /** "Zapata 5" -> street + number, for prefilling the form from a note. */

@@ -10,9 +10,25 @@ import {
 } from "./normalize";
 import type { ChainGeocoder } from "./geocode";
 import { insideAmba } from "./geocode";
-import type { BatchMeta, IngestReport, IngestResult, LocationRecord, RawRow, ReviewRecord, SellerRecord } from "./types";
+import type { BatchMeta, IngestReport, IngestResult, LocationPrecision, LocationRecord, MetricRecord, RawRow, ReviewRecord, SellerRecord } from "./types";
 
 export const H3_STORE_RES = 9;
+
+/** Source precision labels that mean "the centre of an area": they load as approximate locations. `provincia` is not here on purpose. */
+const AREA_PRECISION: Record<string, Exclude<LocationPrecision, "street">> = {
+  localidad: "locality", partido: "partido", municipio: "partido", ciudad: "ciudad",
+};
+
+/** Attributes the map filters on, copied from the row as short lower-case tokens. */
+const ATTR_FIELDS = ["flex_candidate", "flex_coverage", "reputation", "power_seller", "trend", "zone"] as const;
+
+const validCoords = (lat: number | null, lng: number | null): boolean =>
+  lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
+
+/** Snapshot date for metrics: the date in the file name (mapa-flex-sellers_2026-10-08.xlsx), else today. */
+export function snapshotPeriod(filename: string): string {
+  return filename.match(/(\d{4}-\d{2}-\d{2})/)?.[1] ?? new Date().toISOString().slice(0, 10);
+}
 
 /**
  * What makes two rows the same seller when ids cannot tell: name, door and unit. Two
@@ -45,6 +61,8 @@ export async function runPipeline(rawRows: RawRow[], opts: PipelineOptions): Pro
   const locations = new Map<string, LocationRecord>();
   const sellers: SellerRecord[] = [];
   const reviews: ReviewRecord[] = [];
+  const metrics: MetricRecord[] = [];
+  const period = snapshotPeriod(opts.batch.filename);
   const seenIds = new Map<string, { fingerprint: string; row_number: number; name: string | null; address: string; unit: string | null }>();
   const seenFingerprints = new Set<string>();
   let duplicatesSkipped = 0;
@@ -65,7 +83,14 @@ export async function runPipeline(rawRows: RawRow[], opts: PipelineOptions): Pro
     // In CABA the "barrio" column is the locality; in GBA it is usually the localidad and "ciudad" the partido.
     const locality = row.locality ? titleCase(row.locality) : row.city ? titleCase(row.city) : null;
     const note = parseNote(row.note);
-    const key = addressKey(street, number, postal, locality);
+    const provinceRaw = normalizeProvince(row.province);
+    let key = addressKey(street, number, postal, locality);
+    // No street but a located area (a public-profile file): the seller sits at the centre of its locality,
+    // flagged as approximate. Only when the file says how precise the point is, so street files are untouched.
+    const areaPrecision = row.precision ? AREA_PRECISION[foldKey(row.precision)] ?? null : null;
+    const areaName = areaPrecision === "locality" ? locality : (row.city ? titleCase(row.city) : locality) ?? provinceRaw;
+    const areaLevel = !key && areaPrecision != null && validCoords(row.lat, row.lng) && !!areaName;
+    if (areaLevel) key = `~${foldKey(provinceRaw ?? "")}|${areaPrecision}|${foldKey(areaName as string)}`;
     const unit = normalizeUnit(row.unit) ?? note.unit;
     const fingerprint = sellerFingerprint(name, key, unit);
 
@@ -96,9 +121,10 @@ export async function runPipeline(rawRows: RawRow[], opts: PipelineOptions): Pro
     const { kind, parent } = classifySeller(external_id.startsWith("sin-id-") ? null : external_id, name);
     byKind[kind] = (byKind[kind] ?? 0) + 1;
 
-    let province = normalizeProvince(row.province);
+    let province = provinceRaw;
     const cpProvince = provinceFromPostalCode(postal);
-    if (cpProvince && province !== cpProvince) {
+    // The postal code only settles it between the two provinces it can tell apart; a Santa Fe row with CP 2000 stays Santa Fe.
+    if (cpProvince && province !== cpProvince && (!province || province === "CABA" || province === "Buenos Aires")) {
       if (province) warnings.push(`row ${r.row_number}: province "${province}" disagrees with postal code ${postal}; using postal code`);
       province = cpProvince;
     }
@@ -106,18 +132,24 @@ export async function runPipeline(rawRows: RawRow[], opts: PipelineOptions): Pro
     byProvince[province ?? "unknown"] = (byProvince[province ?? "unknown"] ?? 0) + 1;
 
     if (!key) {
-      reviews.push({ external_id, address_key: null, reason: "missing_address", payload: { row_number: r.row_number, street: row.street, note: row.note } });
+      if (row.precision) {
+        // The file located this seller only roughly (province centre) or without usable coordinates: a person decides.
+        reviews.push({ external_id, address_key: null, reason: "approximate_location", payload: { row_number: r.row_number, precision: row.precision, locality: row.locality, province: row.province } });
+      } else {
+        reviews.push({ external_id, address_key: null, reason: "missing_address", payload: { row_number: r.row_number, street: row.street, note: row.note } });
+      }
     } else if (!locations.has(key)) {
       const hasCoords = row.lat != null && row.lng != null;
       locations.set(key, {
         address_key: key,
+        precision: areaLevel ? (areaPrecision as LocationPrecision) : "street",
         street,
         street_number: number,
-        address_display: addressDisplay(street, number),
+        address_display: areaLevel ? (areaName as string) : addressDisplay(street, number),
         locality,
         partido,
         province,
-        postal_code: postal,
+        postal_code: areaLevel ? null : postal,
         lat: hasCoords ? row.lat : null,
         lng: hasCoords ? row.lng : null,
         h3_r9: hasCoords ? latLngToCell(row.lat as number, row.lng as number, H3_STORE_RES) : null,
@@ -127,6 +159,10 @@ export async function runPipeline(rawRows: RawRow[], opts: PipelineOptions): Pro
         geocode_status: hasCoords ? "ok" : "pending",
       });
     }
+
+    const attrs: Record<string, string> = {};
+    for (const f of ATTR_FIELDS) { const v = row[f]; if (v) attrs[f] = v.trim().toLowerCase(); }
+    if (row.shipments_month != null) metrics.push({ external_id, metric: "shipments_month", period, value: row.shipments_month });
 
     const conflict = noteConflictsWithAddress(note.address, street, number, postal);
     if (conflict && key) {
@@ -145,7 +181,15 @@ export async function runPipeline(rawRows: RawRow[], opts: PipelineOptions): Pro
       phone: note.phone,
       note_raw: row.note,
       note_address: conflict ? note.address?.display ?? null : null,
-      extra: { ...row.extra, ...(row.company ? { company: row.company } : {}) },
+      attrs,
+      extra: {
+        ...row.extra,
+        ...(row.company ? { company: row.company } : {}),
+        ...(row.categories ? { categories: row.categories } : {}),
+        ...(row.official_store ? { official_store: row.official_store } : {}),
+        ...(row.profile_url ? { profile_url: row.profile_url } : {}),
+        ...(row.reference_postal_code ? { reference_postal_code: row.reference_postal_code } : {}),
+      },
       row_hash: r.row_hash,
       row_number: r.row_number,
     });
@@ -192,6 +236,7 @@ export async function runPipeline(rawRows: RawRow[], opts: PipelineOptions): Pro
     review_count: reviews.length,
     by_kind: byKind,
     by_province: byProvince,
+    by_precision: [...locations.values()].reduce<Record<string, number>>((acc, l) => { acc[l.precision] = (acc[l.precision] ?? 0) + 1; return acc; }, {}),
     geocoded,
     geocode_failed: failed,
     duplicates_skipped: duplicatesSkipped,
@@ -200,5 +245,5 @@ export async function runPipeline(rawRows: RawRow[], opts: PipelineOptions): Pro
     warnings,
   };
 
-  return { batch: opts.batch, rawRows: raw, locations: [...locations.values()], sellers, reviews, report };
+  return { batch: opts.batch, rawRows: raw, locations: [...locations.values()], sellers, reviews, metrics, report };
 }

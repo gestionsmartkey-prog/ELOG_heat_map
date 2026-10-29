@@ -34,8 +34,8 @@ values (${lit(result.batch.filename)}, ${lit(result.batch.file_hash)}, ${lit(res
   }
 
   for (const g of groups(result.locations)) {
-    out.push(`insert into public.locations (address_key, street, street_number, address_display, locality, partido, province, postal_code, lat, lng, h3_r9, geocode_provider, geocode_confidence, geocode_raw, geocode_status) values
-${g.map((l) => `(${[l.address_key, l.street, l.street_number, l.address_display, l.locality, l.partido, l.province, l.postal_code, l.lat, l.lng, l.h3_r9, l.geocode_provider, l.geocode_confidence, l.geocode_raw, l.geocode_status].map(lit).join(", ")})`).join(",\n")}
+    out.push(`insert into public.locations (address_key, precision, street, street_number, address_display, locality, partido, province, postal_code, lat, lng, h3_r9, geocode_provider, geocode_confidence, geocode_raw, geocode_status) values
+${g.map((l) => `(${[l.address_key, l.precision, l.street, l.street_number, l.address_display, l.locality, l.partido, l.province, l.postal_code, l.lat, l.lng, l.h3_r9, l.geocode_provider, l.geocode_confidence, l.geocode_raw, l.geocode_status].map(lit).join(", ")})`).join(",\n")}
 on conflict (address_key) do update set
   lat = case when public.locations.manual_override or public.locations.geocode_status = 'ok' then public.locations.lat else coalesce(excluded.lat, public.locations.lat) end,
   lng = case when public.locations.manual_override or public.locations.geocode_status = 'ok' then public.locations.lng else coalesce(excluded.lng, public.locations.lng) end,
@@ -47,18 +47,28 @@ on conflict (address_key) do update set
   }
 
   for (const g of groups(result.sellers)) {
-    out.push(`insert into public.sellers (external_id, kind, parent_external_id, name, location_id, unit, source, opening_hours, phone, note_raw, note_address, extra, row_hash, first_batch_id, last_seen_batch_id, active) values
-${g.map((s) => `(${lit(s.external_id)}, ${lit(s.kind)}, ${lit(s.parent_external_id)}, ${lit(s.name)}, public._location_for_key(${lit(s.address_key)}), ${lit(s.unit)}, ${lit(s.source)}, ${lit(s.opening_hours)}, ${lit(s.phone)}, ${lit(s.note_raw)}, ${lit(s.note_address)}, ${lit(s.extra)}, ${lit(s.row_hash)}, ${B}, ${B}, true)`).join(",\n")}
+    out.push(`insert into public.sellers (external_id, kind, parent_external_id, name, location_id, unit, source, opening_hours, phone, note_raw, note_address, attrs, extra, row_hash, first_batch_id, last_seen_batch_id, active) values
+${g.map((s) => `(${lit(s.external_id)}, ${lit(s.kind)}, ${lit(s.parent_external_id)}, ${lit(s.name)}, public._location_for_key(${lit(s.address_key)}), ${lit(s.unit)}, ${lit(s.source)}, ${lit(s.opening_hours)}, ${lit(s.phone)}, ${lit(s.note_raw)}, ${lit(s.note_address)}, ${lit(s.attrs)}, ${lit(s.extra)}, ${lit(s.row_hash)}, ${B}, ${B}, true)`).join(",\n")}
 on conflict (external_id) do update set
   kind = excluded.kind, parent_external_id = excluded.parent_external_id, name = excluded.name,
-  location_id = case when public.sellers.location_locked then public.sellers.location_id else coalesce(excluded.location_id, public.sellers.location_id) end,
+  location_id = case when public.sellers.location_locked then public.sellers.location_id else public._pick_location(public.sellers.location_id, excluded.location_id) end,
   unit = excluded.unit,
   opening_hours = coalesce(excluded.opening_hours, public.sellers.opening_hours),
   phone = coalesce(excluded.phone, public.sellers.phone),
   note_raw = excluded.note_raw,
   note_address = case when public.sellers.location_locked then null else excluded.note_address end,
+  attrs = public.sellers.attrs || excluded.attrs,
   extra = public.sellers.extra || excluded.extra,
   row_hash = excluded.row_hash, last_seen_batch_id = excluded.last_seen_batch_id, active = true;`);
+  }
+
+  for (const g of groups(result.metrics)) {
+    out.push(`insert into public.seller_metrics (seller_id, metric, period, value, batch_id)
+select s.id, v.metric, v.period, v.value, ${B} from (values
+${g.map((m) => `(${lit(m.external_id)}, ${lit(m.metric)}, ${lit(m.period)}, ${lit(m.value)})`).join(",\n")}
+) as v(external_id, metric, period, value)
+join public.sellers s on s.external_id = v.external_id
+on conflict (seller_id, metric, period) do update set value = excluded.value, batch_id = excluded.batch_id;`);
   }
 
   if (result.reviews.length) {
