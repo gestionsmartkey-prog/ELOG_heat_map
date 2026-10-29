@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { METRICS } from "@/lib/metrics";
 import { zoneLabel } from "@/lib/hexes";
+import { ATTR_FILTERS, PROSPECT_SOURCES, sourceLabel, type AttrSelection } from "@/lib/layers";
 import type { SellersResponse } from "@/lib/types";
 
 type Props = {
@@ -12,6 +13,11 @@ type Props = {
   onMetric: (id: string) => void;
   enabledKinds: Set<string>;
   onToggleKind: (kind: string) => void;
+  sources: string[];
+  enabledSources: Set<string>;
+  onToggleSource: (source: string) => void;
+  attrSel: AttrSelection;
+  onToggleAttr: (key: string, value: string) => void;
   catchmentK: number;
   onCatchment: (k: number) => void;
 };
@@ -22,7 +28,7 @@ type Props = {
  * en "Filtros" (controles del mapa) y "Menú" (navegación). Cada control existe una
  * sola vez en el DOM y se reordena por CSS, no se duplica.
  */
-export function TopBar({ data, metricId, onMetric, enabledKinds, onToggleKind, catchmentK, onCatchment }: Props) {
+export function TopBar({ data, metricId, onMetric, enabledKinds, onToggleKind, sources, enabledSources, onToggleSource, attrSel, onToggleAttr, catchmentK, onCatchment }: Props) {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const latest = data?.batches?.[0];
@@ -34,7 +40,7 @@ export function TopBar({ data, metricId, onMetric, enabledKinds, onToggleKind, c
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-[var(--gutter)] py-2 lg:px-[var(--gutter-lg)]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/brand/elog-logo-white.svg" alt="ELOG" width={100} height={30} className="h-[var(--size-logo)] w-auto" />
-        <span className="t-etiqueta hidden text-white/70 sm:block">Mapa de sellers · AMBA</span>
+        <span className="t-etiqueta hidden text-white/70 sm:block">Mapa de sellers</span>
 
         <div className="ml-auto flex items-center gap-2">
           {data ? (
@@ -81,6 +87,37 @@ export function TopBar({ data, metricId, onMetric, enabledKinds, onToggleKind, c
             </label>
           ))}
         </div>
+
+        {sources.length > 1 ? (
+          <div className="flex flex-wrap items-center gap-2" data-testid="source-filters">
+            <span className="t-meta text-white/80">Fuente</span>
+            {sources.map((src) => (
+              <label key={src} className={`pill t-meta flex cursor-pointer items-center gap-2 border px-2 py-1 ${enabledSources.has(src) ? "border-white/60 bg-white/10" : "border-white/25 text-white/60"}`}>
+                <input type="checkbox" className="sr-only" checked={enabledSources.has(src)} onChange={() => onToggleSource(src)} />
+                <span>{sourceLabel(src)}{PROSPECT_SOURCES.includes(src) ? " · aprox." : ""}</span>
+              </label>
+            ))}
+          </div>
+        ) : null}
+
+        {sources.some((src) => PROSPECT_SOURCES.includes(src) && enabledSources.has(src)) ? (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2" data-testid="attr-filters">
+            {ATTR_FILTERS.map((f) => (
+              <div key={f.key} className="flex flex-wrap items-center gap-2">
+                <span className="t-meta text-white/80">{f.label}</span>
+                {f.options.map((o) => {
+                  const on = attrSel[f.key]?.has(o.value) ?? false;
+                  return (
+                    <label key={o.value} className={`pill t-meta flex cursor-pointer items-center border px-2 py-1 ${on ? "border-white/60 bg-white/10" : "border-white/25 text-white/60"}`}>
+                      <input type="checkbox" className="sr-only" checked={on} onChange={() => onToggleAttr(f.key, o.value)} />
+                      <span>{o.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         <label className="flex items-center gap-2">
           <span className="t-meta text-white/80" title="Cuántos hexágonos de alrededor se suman al total de la zona">Zona</span>

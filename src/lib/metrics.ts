@@ -31,8 +31,22 @@ export const METRICS: Metric[] = [
     reduce: (rows) => new Set(rows.map((r) => r.location_id ?? r.id)).size,
     format: (v) => String(v),
   },
-  // Phase 2, when volume rows exist in seller_metrics:
-  // { id: "avg_monthly_volume", label: "Monthly volume", reduce: rows => sum(rows, r => r.metrics?.avg_monthly_volume ?? 0) }
+  {
+    id: "shipments_month",
+    label: "Envíos por mes (est.)",
+    short: "envíos/mes",
+    one: "envío/mes",
+    reduce: (rows) => rows.reduce((sum, r) => sum + (r.metrics?.shipments_month ?? 0), 0),
+    format: (v) => Math.round(v).toLocaleString("es-AR"),
+  },
+  {
+    id: "flex_candidates",
+    label: "Candidatos Flex",
+    short: "candidatos Flex",
+    one: "candidato Flex",
+    reduce: (rows) => rows.filter((r) => r.attrs?.flex_candidate === "si").length,
+    format: (v) => String(v),
+  },
 ];
 
 export function metricById(id: string): Metric {

@@ -4,8 +4,11 @@ import type { Metric } from "./metrics";
 
 export const STORED_RES = 9;
 
-/** Display resolution follows zoom: 7 at metro view, 8 at city view (the default), 9 up close. */
+/** Display resolution follows zoom: coarse for the country, 7 at metro view, 8 at city view (the default), 9 up close. */
 export function resolutionForZoom(zoom: number): number {
+  if (zoom < 5.5) return 4;
+  if (zoom < 7) return 5;
+  if (zoom < 8.5) return 6;
   if (zoom < 10.5) return 7;
   if (zoom < 13) return 8;
   return 9;
@@ -53,6 +56,12 @@ export function catchment(cell: string, agg: Map<string, CellAgg>, metric: Metri
 
 export type Bin = { min: number; max: number; color: string; label: string };
 
+/** Approximate layer: tints of the brand's data blue, so it never reads as the street-level orange. */
+export const APPROX_PALETTE = ["#E3EEF3", "#BAD6E3", "#8CBBD0", "#5E9BB8", "#2B6E8F", "#1D4B63"];
+
+/** The approximate layer never goes finer than this: its points are area centres, not doors. */
+export const APPROX_MAX_RES = 7;
+
 // Rampa secuencial de marca: del Papel al Naranja ELOG y al Naranja Tostado. Pálido = pocos, saturado = muchos.
 const PALETTE = ["#F5E3D3", "#FFC48F", "#FF9038", "#E86A1F", "#C13E06", "#8A2B04"];
 
@@ -61,15 +70,15 @@ const PALETTE = ["#F5E3D3", "#FFC48F", "#FF9038", "#E86A1F", "#C13E06", "#8A2B04
  * distinct values; when there are few distinct values each becomes its own bin.
  * Every bin is labelled with its count range so colour maps back to numbers.
  */
-export function computeBins(values: number[]): Bin[] {
+export function computeBins(values: number[], palette: string[] = PALETTE): Bin[] {
   const vals = values.filter((v) => v > 0).sort((a, b) => a - b);
   if (!vals.length) return [];
   const distinct = [...new Set(vals)];
   let edges: number[];
-  if (distinct.length <= PALETTE.length) {
+  if (distinct.length <= palette.length) {
     edges = distinct;
   } else {
-    const n = PALETTE.length;
+    const n = palette.length;
     edges = [];
     for (let i = 1; i <= n; i++) {
       const q = vals[Math.min(vals.length - 1, Math.ceil((i / n) * vals.length) - 1)];
@@ -79,7 +88,7 @@ export function computeBins(values: number[]): Bin[] {
   const bins: Bin[] = [];
   let lo = 1;
   edges.forEach((hi, i) => {
-    const color = PALETTE[Math.round((i / Math.max(1, edges.length - 1)) * (PALETTE.length - 1))];
+    const color = palette[Math.round((i / Math.max(1, edges.length - 1)) * (palette.length - 1))];
     bins.push({ min: lo, max: hi, color, label: lo === hi ? `${lo}` : `${lo}–${hi}` });
     lo = hi + 1;
   });
