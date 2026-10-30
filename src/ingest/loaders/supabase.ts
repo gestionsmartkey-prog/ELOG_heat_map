@@ -65,18 +65,34 @@ async function loadBatch(sb: SupabaseClient, result: IngestResult, batch_id: str
     external_id: s.external_id, kind: s.kind, parent_external_id: s.parent_external_id, name: s.name,
     location_id: s.address_key ? idByKey.get(s.address_key) ?? null : null, unit: s.unit, source: s.source,
     opening_hours: s.opening_hours, phone: s.phone, note_raw: s.note_raw, note_address: s.note_address,
-    extra: s.extra, row_hash: s.row_hash, first_batch_id: batch_id, last_seen_batch_id: batch_id, active: true,
+    attrs: s.attrs, extra: s.extra, row_hash: s.row_hash, first_batch_id: batch_id, last_seen_batch_id: batch_id, active: true,
   }));
   // Preserve first_batch_id for sellers we have seen before, and keep a seller moved by hand where it was put.
-  const seen = await readIn<{ external_id: string; first_batch_id: string; location_id: string | null; location_locked: boolean }>("sellers", "external_id,first_batch_id,location_id,location_locked", "external_id", sellerRows.map((s) => s.external_id));
+  const seen = await readIn<{ external_id: string; first_batch_id: string; location_id: string | null; location_locked: boolean; attrs: Record<string, string> | null }>("sellers", "external_id,first_batch_id,location_id,location_locked,attrs", "external_id", sellerRows.map((s) => s.external_id));
   const prior = new Map(seen.map((s) => [s.external_id, s]));
+  // A less precise location never replaces a more precise one: look up the precision of every door involved.
+  const involved = [...new Set([...seen.map((s) => s.location_id), ...sellerRows.map((s) => s.location_id)].filter(Boolean) as string[])];
+  const precisionById = new Map((await readIn<{ id: string; precision: string }>("locations", "id,precision", "id", involved)).map((l) => [l.id, l.precision]));
+  const rank = (id: string | null | undefined) => (id ? PRECISION_RANK[precisionById.get(id) ?? "street"] ?? 0 : -1);
   for (const rows of chunk(sellerRows)) {
     const { error } = await sb.from("sellers").upsert(rows.map((r) => {
       const p = prior.get(r.external_id);
       const locked = p?.location_locked ? { location_id: p.location_id, note_address: null } : {};
-      return { ...r, ...locked, first_batch_id: p?.first_batch_id ?? batch_id };
+      const keep = !p?.location_locked && p?.location_id && rank(p.location_id) > rank(r.location_id) ? { location_id: p.location_id } : {};
+      // Attributes merge like extra does in the SQL loader: a new file refreshes what it carries and keeps the rest.
+      return { ...r, ...locked, ...keep, attrs: { ...(p?.attrs ?? {}), ...r.attrs }, first_batch_id: p?.first_batch_id ?? batch_id };
     }), { onConflict: "external_id" });
     if (error) throw new Error(`sellers upsert: ${error.message}`);
+  }
+
+  if (result.metrics.length) {
+    const sellerIds = await readIn<{ id: string; external_id: string }>("sellers", "id,external_id", "external_id", [...new Set(result.metrics.map((m) => m.external_id))]);
+    const sid = new Map(sellerIds.map((s) => [s.external_id, s.id]));
+    const rows = result.metrics.flatMap((m) => { const seller_id = sid.get(m.external_id); return seller_id ? [{ seller_id, metric: m.metric, period: m.period, value: m.value, batch_id }] : []; });
+    for (const part of chunk(rows)) {
+      const { error } = await sb.from("seller_metrics").upsert(part, { onConflict: "seller_id,metric,period" });
+      if (error) throw new Error(`seller_metrics: ${error.message}`);
+    }
   }
 
   let reviewCount = 0;
@@ -120,6 +136,9 @@ async function loadBatch(sb: SupabaseClient, result: IngestResult, batch_id: str
   if (fErr) throw new Error(`batch finish: ${fErr.message}`);
   return { batch_id };
 }
+
+/** Mirrors public._precision_rank in the database. */
+const PRECISION_RANK: Record<string, number> = { street: 3, locality: 2, partido: 1, ciudad: 1 };
 
 function mustEnv(name: string): string {
   const v = process.env[name];

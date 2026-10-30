@@ -12,7 +12,7 @@ export const HEADER_ALIASES: Record<keyof Omit<MappedRow, "extra">, string[]> = 
   street: ["direccion", "calle", "street", "address", "domicilio"],
   street_number: ["numero", "altura", "nro", "n", "number", "street number"],
   locality: ["barrio", "localidad", "neighborhood", "neighbourhood"],
-  city: ["ciudad", "city", "partido", "municipio"],
+  city: ["ciudad", "city", "partido", "municipio", "partido comuna"],
   province: ["provincia", "province", "estado", "state"],
   postal_code: ["codigo postal", "cp", "cpa", "zip", "zip code", "postal", "postal code"],
   // Not "departamento": in some exports that column is the district, not the flat.
@@ -20,6 +20,20 @@ export const HEADER_ALIASES: Record<keyof Omit<MappedRow, "extra">, string[]> = 
   note: ["informacion adicional", "info adicional", "observaciones", "notas", "nota", "note", "notes", "comentarios", "referencia"],
   lat: ["lat", "latitud", "latitude"],
   lng: ["lng", "lon", "long", "longitud", "longitude"],
+  // Public-profile files (no street): the location is the centre of a locality, not a door.
+  precision: ["precision de ubicacion", "precision ubicacion", "location precision"],
+  // Deliberately not "codigo postal": this is the middle of the locality, not the seller's.
+  reference_postal_code: ["cp de referencia", "cp referencia", "reference postal code"],
+  flex_coverage: ["cobertura flex"],
+  flex_candidate: ["candidato flex", "flex candidate"],
+  shipments_month: ["envios mes est", "envios mes", "envios por mes", "shipments per month"],
+  trend: ["tendencia interanual", "tendencia"],
+  reputation: ["reputacion", "reputation"],
+  power_seller: ["power seller", "powerseller"],
+  zone: ["zona", "zone"],
+  profile_url: ["perfil", "profile", "profile url", "url perfil"],
+  official_store: ["tienda oficial", "tiendas oficiales", "official store"],
+  categories: ["categorias", "categories"],
 };
 
 const aliasIndex: Map<string, keyof Omit<MappedRow, "extra">> = new Map();
@@ -49,7 +63,9 @@ export function mapRow(raw: RawRow): { row: MappedRow; unmapped: string[] } {
   const row: MappedRow = {
     external_id: null, name: null, company: null, street: null, street_number: null,
     locality: null, city: null, province: null, postal_code: null, unit: null, note: null,
-    lat: null, lng: null, extra: {},
+    lat: null, lng: null, precision: null, reference_postal_code: null, flex_coverage: null, flex_candidate: null,
+    shipments_month: null, trend: null, reputation: null, power_seller: null, zone: null, profile_url: null,
+    official_store: null, categories: null, extra: {},
   };
   const unmapped: string[] = [];
   for (const [header, value] of Object.entries(raw)) {
@@ -62,7 +78,7 @@ export function mapRow(raw: RawRow): { row: MappedRow; unmapped: string[] } {
       }
       continue;
     }
-    if (field === "lat" || field === "lng") row[field] = asNumber(value);
+    if (field === "lat" || field === "lng" || field === "shipments_month") row[field] = asNumber(value);
     else if (field === "unit") {
       // "Piso" and "Depto" often come as two columns: keep both, labelled when the value is bare ("3" -> "Piso 3").
       const t = asText(value);

@@ -154,6 +154,7 @@ export function ImportApp() {
               <span className="t-etiqueta text-gris-700">Origen</span>
               <select value={source} onChange={(e) => setSource(e.target.value)} className="field" data-testid="source-select">
                 <option value="meli">Mercado Libre</option>
+                <option value="ml_publico">Perfiles públicos ML (prospectos, sin dirección)</option>
                 <option value="otro">Otro</option>
               </select>
             </label>
