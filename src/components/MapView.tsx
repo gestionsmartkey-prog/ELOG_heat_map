@@ -6,7 +6,7 @@ import type { LngLatBoundsLike, Map as MLMap, MapMouseEvent } from "maplibre-gl"
 import { cellToLatLng } from "h3-js";
 import type { MapSeller } from "@/lib/types";
 import type { Metric } from "@/lib/metrics";
-import { aggregate, catchment, computeBins, pointsGeoJSON, resolutionForZoom, toGeoJSON, zoneLabel, type Bin, type CellAgg } from "@/lib/hexes";
+import { APPROX_MAX_RES, APPROX_PALETTE, aggregate, catchment, computeBins, pointsGeoJSON, resolutionForZoom, toGeoJSON, zoneLabel, type Bin, type CellAgg } from "@/lib/hexes";
 import { Legend } from "./Legend";
 
 const BASEMAP = process.env.NEXT_PUBLIC_BASEMAP_STYLE ?? "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
@@ -31,10 +31,14 @@ async function resolveStyle(): Promise<maplibregl.StyleSpecification | string> {
 }
 
 const AMBA_BOUNDS: LngLatBoundsLike = [[-59.3, -35.1], [-57.9, -34.25]];
+/** The prospect files cover the whole country, so the map is no longer fenced to the metro area. */
+const ARGENTINA_BOUNDS: LngLatBoundsLike = [[-74, -56], [-52, -20]];
 const HOME_CENTER: [number, number] = [-58.55, -34.62];
 
 type Props = {
   sellers: MapSeller[];
+  /** Sellers located only by the centre of an area: their own layer, never mixed into the door-level hexes. */
+  approxSellers: MapSeller[];
   metric: Metric;
   catchmentK: number;
   selectedCell: string | null;
@@ -42,7 +46,7 @@ type Props = {
   onResolution: (res: number) => void;
 };
 
-export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, onResolution }: Props) {
+export function MapView({ sellers, approxSellers, metric, catchmentK, selectedCell, onSelect, onResolution }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const [ready, setReady] = useState(false);
@@ -55,12 +59,15 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
   const bins: Bin[] = useMemo(() => computeBins([...agg.values()].map((a) => a.value)), [agg]);
   const hexes = useMemo(() => toGeoJSON(agg, bins), [agg, bins]);
   const points = useMemo(() => pointsGeoJSON(sellers), [sellers]);
+  const approxAgg = useMemo(() => aggregate(approxSellers, Math.min(res, APPROX_MAX_RES), metric), [approxSellers, res, metric]);
+  const approxBins: Bin[] = useMemo(() => computeBins([...approxAgg.values()].map((a) => a.value), APPROX_PALETTE), [approxAgg]);
+  const approxHexes = useMemo(() => toGeoJSON(approxAgg, approxBins), [approxAgg, approxBins]);
   const labels = useMemo(() => localityLabels(sellers), [sellers]);
   const markersRef = useRef<maplibregl.Marker[]>([]);
 
   // Keep latest values reachable from map event handlers without re-binding them.
-  const latest = useRef({ agg, metric, catchmentK, onSelect });
-  useEffect(() => { latest.current = { agg, metric, catchmentK, onSelect }; }, [agg, metric, catchmentK, onSelect]);
+  const latest = useRef({ agg, approxAgg, metric, catchmentK, onSelect });
+  useEffect(() => { latest.current = { agg, approxAgg, metric, catchmentK, onSelect }; }, [agg, approxAgg, metric, catchmentK, onSelect]);
 
   useEffect(() => { onResolution(res); }, [res, onResolution]);
 
@@ -79,9 +86,9 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
         style,
         center: HOME_CENTER,
         zoom: 10,
-        minZoom: 8,
+        minZoom: 3.5,
         maxZoom: 17,
-        maxBounds: [[-60.2, -35.6], [-57.2, -33.8]],
+        maxBounds: ARGENTINA_BOUNDS,
         attributionControl: { compact: true },
       });
       mapRef.current = map;
@@ -92,6 +99,10 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
       m.on("load", () => {
         m.addSource("hexes", { type: "geojson", data: { type: "FeatureCollection", features: [] }, promoteId: "cell" });
         m.addSource("points", { type: "geojson", data: { type: "FeatureCollection", features: [] }, promoteId: "id" });
+        m.addSource("hexes-approx", { type: "geojson", data: { type: "FeatureCollection", features: [] }, promoteId: "cell" });
+        // Approximate layer sits under the door-level hexes: blue, dashed outline.
+        m.addLayer({ id: "approx-fill", type: "fill", source: "hexes-approx", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.6 } });
+        m.addLayer({ id: "approx-line", type: "line", source: "hexes-approx", paint: { "line-color": "#1D4B63", "line-width": 1, "line-dasharray": [2, 2] } });
         m.addLayer({
           id: "hex-fill", type: "fill", source: "hexes",
           paint: {
@@ -136,6 +147,19 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
         if (!popupRef.current) popupRef.current = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
         popupRef.current.setLngLat(e.lngLat).setHTML(html).addTo(m);
       });
+      m.on("mousemove", "approx-fill", (e: MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+        // A door-level hex on top wins: its own handler already wrote the popup.
+        if (m.queryRenderedFeatures(e.point, { layers: ["hex-fill"] }).length) return;
+        const cell = e.features?.[0]?.properties?.cell as string | undefined;
+        const cellAgg = cell ? latest.current.approxAgg.get(cell) : undefined;
+        if (!cellAgg) return;
+        m.getCanvas().style.cursor = "default";
+        const met = latest.current.metric;
+        const html = `<strong>${met.format(cellAgg.value)}</strong> ${met.short} · ubicación aproximada<br/><span style="color:#606060">Centro de la localidad, no el domicilio</span>`;
+        if (!popupRef.current) popupRef.current = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
+        popupRef.current.setLngLat(e.lngLat).setHTML(html).addTo(m);
+      });
+      m.on("mouseleave", "approx-fill", () => { m.getCanvas().style.cursor = ""; popupRef.current?.remove(); });
       m.on("mouseleave", "hex-fill", () => {
         m.getCanvas().style.cursor = "";
         if (hoverRef.current) m.setFeatureState({ source: "hexes", id: hoverRef.current }, { hover: false });
@@ -161,7 +185,8 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
     if (!map || !ready) return;
     (map.getSource("hexes") as maplibregl.GeoJSONSource | undefined)?.setData(hexes);
     (map.getSource("points") as maplibregl.GeoJSONSource | undefined)?.setData(points);
-  }, [hexes, points, ready]);
+    (map.getSource("hexes-approx") as maplibregl.GeoJSONSource | undefined)?.setData(approxHexes);
+  }, [hexes, points, approxHexes, ready]);
 
   // Locality labels: plain DOM markers (render without basemap fonts), with a
   // greedy screen-space collision pass so dense clusters do not pile up.
@@ -204,7 +229,7 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
   const fitAll = () => {
     const map = mapRef.current;
     if (!map) return;
-    const cells = [...agg.keys()];
+    const cells = [...agg.keys(), ...approxAgg.keys()];
     if (!cells.length) { map.fitBounds(AMBA_BOUNDS, { padding: 20 }); return; }
     const b = new maplibregl.LngLatBounds();
     for (const c of cells) { const [lat, lng] = cellToLatLng(c); b.extend([lng, lat]); }
@@ -214,8 +239,9 @@ export function MapView({ sellers, metric, catchmentK, selectedCell, onSelect, o
   return (
     <div className="relative h-full w-full" data-testid="map" data-ready={ready ? "1" : "0"} data-hexes={hexes.features.length}>
       <div ref={containerRef} className="h-full w-full" />
-      <div className="pointer-events-none absolute bottom-6 left-3 z-10">
-        <Legend bins={bins} one={metric.one} many={metric.short} res={res} />
+      <div className="pointer-events-none absolute bottom-6 left-3 z-10 flex flex-col gap-2">
+        {approxSellers.length ? <Legend bins={approxBins} one={metric.one} many={metric.short} res={Math.min(res, APPROX_MAX_RES)} title="Aproximado (centro de localidad)" testId="legend-approx" /> : null}
+        <Legend bins={bins} one={metric.one} many={metric.short} res={res} title={approxSellers.length ? "Por domicilio" : undefined} />
       </div>
       <button onClick={fitAll} className="btn btn-light t-meta absolute right-3 top-3 z-10 shadow-ctrl" title="Encuadrar todos los datos">
         Ver todo

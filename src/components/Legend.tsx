@@ -5,9 +5,10 @@ import type { Bin } from "@/lib/hexes";
  * no title, so it takes as little of the map as possible. The H3 resolution stays
  * available as a tooltip and data attribute.
  */
-export function Legend({ bins, one, many, res }: { bins: Bin[]; one: string; many: string; res: number }) {
+export function Legend({ bins, one, many, res, title, testId = "legend" }: { bins: Bin[]; one: string; many: string; res: number; title?: string; testId?: string }) {
   return (
-    <div className="card t-meta pointer-events-auto py-2 pl-2 pr-4 shadow-card" data-testid="legend" data-res={res} title={`Cantidad por hexágono (H3 res ${res})`}>
+    <div className="card t-meta pointer-events-auto py-2 pl-2 pr-4 shadow-card" data-testid={testId} data-res={res} title={`Cantidad por hexágono (H3 res ${res})`}>
+      {title ? <p className="t-etiqueta mb-1 text-gris-700">{title}</p> : null}
       {bins.length === 0 ? (
         <p className="text-gris-700">Sin datos en la vista.</p>
       ) : (

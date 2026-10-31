@@ -23,6 +23,12 @@ export type MapSeller = {
   unit?: string | null;
   /** The door's address was corrected by hand in the review screen. */
   address_edited?: boolean;
+  /** street = an exact door; anything else is the centre of an area. Absent in older fixtures (= street). */
+  precision?: string;
+  /** Filterable attributes from the source file (flex_candidate, reputation, power_seller, ...). */
+  attrs?: Record<string, string>;
+  /** Latest value of each metric (shipments_month, ...). */
+  metrics?: Record<string, number>;
 };
 
 export type BatchSummary = {
