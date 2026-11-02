@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { latLngToCell } from "h3-js";
 import { supabaseAdmin } from "./supabase";
+import { fetchAllPages } from "./paging";
 import type { BatchSummary, MapSeller, SellersResponse } from "./types";
 
 const H3_RES = 9;
@@ -15,16 +16,17 @@ export async function getSellersResponse(): Promise<SellersResponse> {
 
   const sb = supabaseAdmin();
   const [sellersRes, kindsRes, batchesRes, reviewsRes] = await Promise.all([
-    sb.from("map_sellers").select("*").eq("active", true).order("name"),
+    // More than 1,000 sellers: read them in pages, ordered by a unique key so none repeat or go missing.
+    fetchAllPages<MapSeller>((from, to) => sb.from("map_sellers").select("*").eq("active", true).order("name").order("id").range(from, to))
+      .catch((e: Error) => { throw new Error(`map_sellers: ${e.message}`); }),
     sb.from("seller_kinds").select("kind,label,counts_as_seller,color"),
     sb.from("import_batches").select("id,filename,status,row_count,loaded_count,review_count,created_at,finished_at").order("created_at", { ascending: false }).limit(20),
     sb.from("review_items").select("id", { count: "exact", head: true }).eq("resolved", false),
   ]);
-  if (sellersRes.error) throw new Error(`map_sellers: ${sellersRes.error.message}`);
   if (kindsRes.error) throw new Error(`seller_kinds: ${kindsRes.error.message}`);
   if (batchesRes.error) throw new Error(`import_batches: ${batchesRes.error.message}`);
 
-  const sellers = (sellersRes.data as MapSeller[]).map(withH3);
+  const sellers = sellersRes.map(withH3);
   return {
     sellers,
     kinds: kindsRes.data ?? [],
