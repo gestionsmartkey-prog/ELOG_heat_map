@@ -5,6 +5,7 @@ import { formatPkgs, formatShare, shareBin } from "@/lib/opportunity";
 type Props = {
   picks: Pick[] | null;
   radiusKm: number;
+  target: number;
   hovered: number | null;
   onHover: (rank: number | null) => void;
   onOpen: (p: Pick) => void;
@@ -14,6 +15,7 @@ type Props = {
 export function OpportunityList({
   picks,
   radiusKm,
+  target,
   hovered,
   onHover,
   onOpen,
@@ -84,24 +86,28 @@ export function OpportunityList({
                   <span className="block truncate font-medium text-carbon">
                     {p.name}
                   </span>
-                  <span className="t-micro block text-gris-700 tnum">
-                    {formatPkgs(p.volume)} paq/mes ·{" "}
+                  {/* Lead with what this hub would take; the radius total is only the market around it. */}
+                  <span className="t-micro block text-carbon tnum">
+                    {formatPkgs(p.needed.reached)} paq/mes con{" "}
                     {p.needed.enough
-                      ? `necesitás ${p.needed.picks.length} (${neededMix(p)})`
-                      : "no llega al objetivo"}
+                      ? `${p.needed.picks.length} sellers (${neededMix(p)})`
+                      : `los ${p.needed.picks.length} sellers · no llega`}
+                  </span>
+                  <span className="t-micro block text-gris-700 tnum">
+                    potencial en el radio {formatPkgs(p.volume)}
                   </span>
                   <span className="mt-1 block h-1 overflow-hidden rounded-pill bg-gris-200">
                     <span
                       className="block h-full"
                       style={{
-                        width: `${Math.min(100, p.share * 100)}%`,
-                        background: shareBin(p.share).color,
+                        width: `${Math.min(100, hubShare(p, target) * 100)}%`,
+                        background: shareBin(hubShare(p, target)).color,
                       }}
                     />
                   </span>
                 </span>
                 <span className="t-dato tnum text-carbon">
-                  {formatShare(p.share)}
+                  {formatShare(hubShare(p, target))}
                 </span>
               </button>
             </li>
@@ -122,3 +128,10 @@ export function neededMix(p: Pick): string {
     .filter(Boolean)
     .join(" + ");
 }
+
+/** Share of the target the hub reaches with the sellers it needs (not the whole radius). */
+export const hubShare = (
+  c: { needed: { reached: number } },
+  target: number,
+): number =>
+  c.needed.reached / target;

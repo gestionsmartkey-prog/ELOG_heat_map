@@ -9,6 +9,7 @@ import {
   shareBin,
   volumeOf,
 } from "@/lib/opportunity";
+import { hubShare } from "./OpportunityList";
 
 type Props = {
   cluster: Cluster & { rank?: number };
@@ -44,7 +45,9 @@ export function ClusterPanel({
       volume: rows.reduce((sum, s) => sum + (volumeOf(s) ?? 0), 0),
     };
   });
-  const missing = Math.max(0, target - c.volume);
+  // The headline is what this hub would take; the radius total is the market around it.
+  const share = hubShare(c, target);
+  const missing = Math.max(0, target - c.needed.reached);
   const copyLink = () => {
     void navigator.clipboard?.writeText(window.location.href);
   };
@@ -80,25 +83,29 @@ export function ClusterPanel({
         </div>
         <div>
           <div className="flex items-baseline gap-2">
-            <span className="t-display-lg text-carbon">
-              {formatPkgs(c.volume)}
+            <span className="t-display-lg text-carbon" data-testid="hub-volume">
+              {formatPkgs(c.needed.reached)}
             </span>
-            <span className="text-gris-700">paq/mes alcanzables (est.)</span>
-            <span className="t-dato ml-auto tnum">{formatShare(c.share)}</span>
+            <span className="text-gris-700">paq/mes para este hub (est.)</span>
+            <span className="t-dato ml-auto tnum">{formatShare(share)}</span>
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-pill bg-gris-200">
             <div
               className="h-full"
               style={{
-                width: `${Math.min(100, c.share * 100)}%`,
-                background: shareBin(c.share).color,
+                width: `${Math.min(100, share * 100)}%`,
+                background: shareBin(share).color,
               }}
             />
           </div>
           <p className="t-micro mt-1 text-gris-700">
             {missing
-              ? `Faltan ${formatPkgs(missing)} paq/mes para el objetivo de ${formatPkgs(target)}`
-              : `Cubre el objetivo de ${formatPkgs(target)}`}
+              ? `Faltan ${formatPkgs(missing)} paq/mes: todos los sellers del radio juntos no llegan al objetivo de ${formatPkgs(target)}`
+              : `Con ${c.needed.picks.length} sellers cubre el objetivo de ${formatPkgs(target)}`}
+          </p>
+          <p className="t-micro text-gris-700 tnum">
+            Potencial en el radio: {formatPkgs(c.volume)} paq/mes ·{" "}
+            {c.sellers.length} sellers
           </p>
         </div>
         {c.needed.picks.length ? (

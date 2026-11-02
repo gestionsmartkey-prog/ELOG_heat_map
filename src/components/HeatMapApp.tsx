@@ -261,6 +261,7 @@ export function HeatMapApp({ initialQuery }: { initialQuery: string }) {
               <OpportunityList
                 picks={ranking?.picks ?? null}
                 radiusKm={view.radiusKm}
+                target={view.target}
                 hovered={hovered}
                 onHover={setHovered}
                 onOpen={(p) => setSelection({ kind: "pick", rank: p.rank })}
