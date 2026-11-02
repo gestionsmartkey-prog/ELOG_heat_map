@@ -57,6 +57,7 @@
   --panel-min: 300px;
   --panel-max: 440px;
   --panel-sheet-max: 78dvh; /* alto máx. del panel como hoja inferior en móvil */
+  --panel-sheet-peek: 34dvh; /* hoja inferior sin selección: asoma el top 3 de oportunidades */
   --queue-w: 380px;         /* lista de la cola de revisión en escritorio */
   --review-card-w: 460px;   /* tarjeta de revisión acoplada a la derecha del mapa en escritorio */
   --gutter: 1rem;           /* margen lateral de página en móvil (= space-2) */

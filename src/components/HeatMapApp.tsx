@@ -2,75 +2,233 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { metricById } from "@/lib/metrics";
-import { PROSPECT_SOURCES, isApproximate, matchesAttrs, type AttrSelection } from "@/lib/layers";
-import type { CellAgg } from "@/lib/hexes";
-import type { SellersResponse } from "@/lib/types";
+import { applyFilters } from "@/lib/filters";
+import {
+  bucketByCell,
+  clusterAt,
+  radiusToK,
+  type Cluster,
+  type Pick,
+} from "@/lib/ranking";
+import { countableVolume, isExact } from "@/lib/opportunity";
+import { decodeView, encodeView, type ViewState } from "@/lib/viewState";
+import type { MapSeller, SellersResponse } from "@/lib/types";
 import { TopBar } from "./TopBar";
-import { Panel } from "./Panel";
+import { MapDock } from "./MapDock";
+import { OpportunityList } from "./OpportunityList";
+import { ClusterPanel } from "./ClusterPanel";
+import { SellerDetail } from "./SellerDetail";
+import { useRanking } from "./useRanking";
 
 // MapLibre touches window at import time, so the map is client-only.
-const MapView = dynamic(() => import("./MapView").then((m) => m.MapView), { ssr: false, loading: () => <div className="flex h-full items-center justify-center text-gris-700">Cargando mapa…</div> });
+const MapView = dynamic(() => import("./MapView").then((m) => m.MapView), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-full items-center justify-center text-gris-700">
+      Cargando mapa…
+    </div>
+  ),
+});
 
-export function HeatMapApp() {
+type Selection =
+  { kind: "pick"; rank: number } | { kind: "cell"; cluster: Cluster } | null;
+
+const NO_EXCLUDED = { noData: 0, filtered: 0 };
+
+export function HeatMapApp({ initialQuery }: { initialQuery: string }) {
   const [data, setData] = useState<SellersResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [metricId, setMetricId] = useState("seller_count");
-  const [enabledKinds, setEnabledKinds] = useState<Set<string>>(new Set(["seller", "partner", "unknown"]));
-  // null = nobody touched it: every source is on except the prospect ones, which stay off until asked for.
-  const [pickedSources, setPickedSources] = useState<Set<string> | null>(null);
-  const [attrSel, setAttrSel] = useState<AttrSelection>({});
-  const [catchmentK, setCatchmentK] = useState(1);
-  const [selected, setSelected] = useState<{ cell: CellAgg; catchmentValue: number | null } | null>(null);
-  const [res, setRes] = useState(8);
+  const [view, setView] = useState<ViewState>(() => decodeView(initialQuery));
+  const [selection, setSelection] = useState<Selection>(null);
+  const [seller, setSeller] = useState<MapSeller | null>(null);
+  const [hovered, setHovered] = useState<number | null>(null);
+  // The map reads its start position once; later moves only update the URL.
+  const [initialView] = useState(() => ({
+    center: view.center,
+    zoom: view.zoom,
+  }));
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/sellers", { cache: "no-store" })
-      .then(async (r) => { if (r.status === 401) { window.location.href = "/login"; return null; } if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-      .then((j) => { if (!cancelled && j) setData(j as SellersResponse); })
-      .catch((e) => { if (!cancelled) setError(String(e)); });
-    return () => { cancelled = true; };
+      .then(async (r) => {
+        if (r.status === 401) {
+          window.location.href = "/login";
+          return null;
+        }
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((j) => {
+        if (!cancelled && j) setData(j as SellersResponse);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const metric = metricById(metricId);
-  const sources = useMemo(() => [...new Set((data?.sellers ?? []).map((s) => s.source))].sort(), [data]);
-  const enabledSources = useMemo(() => pickedSources ?? new Set(sources.filter((s) => !PROSPECT_SOURCES.includes(s))), [pickedSources, sources]);
-  // Attribute filters narrow the prospect files; sellers from other sources are never hidden by them.
+  // Keep the URL in step with the view, without adding history entries.
+  useEffect(() => {
+    const qs = encodeView(view);
+    window.history.replaceState(
+      null,
+      "",
+      qs ? `?${qs}` : window.location.pathname,
+    );
+  }, [view]);
+
   const filtered = useMemo(
-    () => (data?.sellers ?? []).filter((s) => enabledKinds.has(s.kind) && enabledSources.has(s.source) && s.h3_r9 && (!PROSPECT_SOURCES.includes(s.source) || matchesAttrs(s, attrSel))),
-    [data, enabledKinds, enabledSources, attrSel],
+    () => (data ? applyFilters(data.sellers, view.filters) : null),
+    [data, view.filters],
   );
-  const visible = useMemo(() => filtered.filter((s) => !isApproximate(s)), [filtered]);
-  const approxVisible = useMemo(() => filtered.filter(isApproximate), [filtered]);
+  const ranking = useRanking(
+    filtered?.kept ?? null,
+    view.target,
+    view.radiusKm,
+  );
+  const buckets = useMemo(
+    () => (filtered ? bucketByCell(filtered.kept) : null),
+    [filtered],
+  );
+  const exact = useMemo(() => filtered?.kept.filter(isExact) ?? [], [filtered]);
+  const pins = useMemo(() => ranking?.picks.slice(0, 5) ?? [], [ranking]);
 
-  const toggleSource = (src: string) => setPickedSources(() => { const n = new Set(enabledSources); if (n.has(src)) n.delete(src); else n.add(src); return n; });
-  const toggleAttr = (key: string, value: string) => setAttrSel((prev) => { const n = new Set(prev[key] ?? []); if (n.has(value)) n.delete(value); else n.add(value); return { ...prev, [key]: n }; });
-  const toggleKind = (k: string) => setEnabledKinds((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
-  const onSelect = useCallback((cell: CellAgg | null, catchmentValue: number | null) => setSelected(cell ? { cell, catchmentValue } : null), []);
+  // A change of target, radius or filters invalidates what is open in the panel.
+  const viewKey = `${view.target}|${view.radiusKm}|${JSON.stringify(view.filters)}`;
+  const [lastKey, setLastKey] = useState(viewKey);
+  if (viewKey !== lastKey) {
+    setLastKey(viewKey);
+    setSelection(null);
+    setSeller(null);
+  }
 
-  // Selection refers to a cell at a given resolution; drop it when the grid changes underneath.
-  const gridKey = `${res}|${metricId}|${[...enabledKinds].sort().join(",")}|${[...enabledSources].sort().join(",")}|${JSON.stringify(Object.entries(attrSel).map(([k, v]) => [k, [...v].sort()]))}`;
-  const [lastGridKey, setLastGridKey] = useState(gridKey);
-  if (gridKey !== lastGridKey) { setLastGridKey(gridKey); setSelected(null); }
+  const pick: Pick | null =
+    selection?.kind === "pick"
+      ? (ranking?.picks.find((p) => p.rank === selection.rank) ?? null)
+      : null;
+  const cluster: (Cluster & { rank?: number }) | null =
+    pick ?? (selection?.kind === "cell" ? selection.cluster : null);
+  const hoveredPick =
+    hovered != null
+      ? ranking?.picks.find((p) => p.rank === hovered)
+      : undefined;
+  const focusOf = cluster ?? hoveredPick ?? null;
+  const solid = cluster != null;
+  const focus = useMemo(
+    () =>
+      focusOf
+        ? { lat: focusOf.lat, lng: focusOf.lng, cell: focusOf.cell, solid }
+        : null,
+    [focusOf, solid],
+  );
+
+  const onHexClick = useCallback(
+    (cell: string) => {
+      if (!buckets) return;
+      setSeller(null);
+      setSelection({
+        kind: "cell",
+        cluster: clusterAt(
+          cell,
+          buckets,
+          radiusToK(view.radiusKm),
+          view.target,
+        ),
+      });
+    },
+    [buckets, view.radiusKm, view.target],
+  );
+  const onMove = useCallback(
+    (center: [number, number], zoom: number) =>
+      setView((v) => ({ ...v, center, zoom })),
+    [],
+  );
+  const onPinClick = useCallback((rank: number) => {
+    setSeller(null);
+    setSelection({ kind: "pick", rank });
+  }, []);
+
+  const kpis =
+    filtered && ranking
+      ? {
+          sellers: filtered.kept.length,
+          packages: filtered.kept.reduce(
+            (sum, s) => sum + countableVolume(s),
+            0,
+          ),
+          hubs: ranking.picks.length,
+        }
+      : null;
 
   return (
     <div className="flex h-[100dvh] flex-col">
-      <TopBar data={data} metricId={metricId} onMetric={setMetricId} enabledKinds={enabledKinds} onToggleKind={toggleKind} sources={sources} enabledSources={enabledSources} onToggleSource={toggleSource} attrSel={attrSel} onToggleAttr={toggleAttr} catchmentK={catchmentK} onCatchment={setCatchmentK} />
+      <TopBar data={data} kpis={kpis} />
       <div className="relative flex min-h-0 flex-1 flex-col md:flex-row">
         <div className="relative min-h-0 min-w-0 flex-1">
           {error ? (
-            <div className="flex h-full items-center justify-center p-[var(--gutter)] text-center text-rojo">No se pudieron cargar los sellers: {error}</div>
+            <div className="flex h-full items-center justify-center p-[var(--gutter)] text-center text-rojo">
+              No se pudieron cargar los sellers: {error}
+            </div>
           ) : (
-            <MapView sellers={visible} approxSellers={approxVisible} metric={metric} catchmentK={catchmentK} selectedCell={selected?.cell.cell ?? null} onSelect={onSelect} onResolution={setRes} />
+            <>
+              <MapView
+                scores={ranking?.scores ?? null}
+                target={view.target}
+                radiusKm={view.radiusKm}
+                pins={pins}
+                exact={exact}
+                references={filtered?.references ?? []}
+                focus={focus}
+                activeRank={pick?.rank ?? hovered}
+                initialView={initialView}
+                onHexClick={onHexClick}
+                onPinHover={setHovered}
+                onPinClick={onPinClick}
+                onMove={onMove}
+              />
+              <MapDock
+                target={view.target}
+                onTarget={(target) => setView((v) => ({ ...v, target }))}
+                radiusKm={view.radiusKm}
+                onRadius={(radiusKm) => setView((v) => ({ ...v, radiusKm }))}
+                filters={view.filters}
+                onFilters={(filters) => setView((v) => ({ ...v, filters }))}
+                excluded={filtered?.excluded ?? NO_EXCLUDED}
+              />
+            </>
           )}
         </div>
-        {/* Panel: barra lateral en md+, hoja inferior en móvil (solo cuando hay selección). */}
+        {/* Panel: barra lateral en md+, hoja inferior en móvil que siempre asoma el top 3. */}
         <div
-          className={`flex flex-col bg-white md:w-[var(--panel-w)] md:min-w-[var(--panel-min)] md:max-w-[var(--panel-max)] md:border-l md:border-gris-200 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:h-[var(--panel-sheet-max)] max-md:rounded-t-card max-md:border-t max-md:border-gris-200 max-md:shadow-pop ${selected ? "max-md:flex" : "max-md:hidden"}`}
+          className={`flex flex-col bg-white md:w-[var(--panel-w)] md:min-w-[var(--panel-min)] md:max-w-[var(--panel-max)] md:border-l md:border-gris-200 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:rounded-t-card max-md:border-t max-md:border-gris-200 max-md:shadow-pop ${cluster ? "max-md:h-[var(--panel-sheet-max)]" : "max-md:max-h-[var(--panel-sheet-peek)]"}`}
         >
-          <div className="flex items-center justify-center py-2 md:hidden"><span className="sheet-grabber" aria-hidden="true" /></div>
-          <Panel cell={selected?.cell ?? null} catchmentValue={selected?.catchmentValue ?? null} catchmentK={catchmentK} metricShort={metric.short} onClear={() => setSelected(null)} />
+          <div className="flex items-center justify-center py-2 md:hidden">
+            <span className="sheet-grabber" aria-hidden="true" />
+          </div>
+          {seller && cluster ? (
+            <SellerDetail seller={seller} onBack={() => setSeller(null)} />
+          ) : cluster ? (
+            <ClusterPanel
+              cluster={cluster}
+              radiusKm={view.radiusKm}
+              target={view.target}
+              claimedBy={ranking?.claimedBy ?? new Map()}
+              excluded={filtered?.excluded ?? NO_EXCLUDED}
+              onBack={() => setSelection(null)}
+              onSeller={setSeller}
+            />
+          ) : (
+            <OpportunityList
+              picks={ranking?.picks ?? null}
+              radiusKm={view.radiusKm}
+              hovered={hovered}
+              onHover={setHovered}
+              onOpen={(p) => setSelection({ kind: "pick", rank: p.rank })}
+            />
+          )}
         </div>
       </div>
     </div>
