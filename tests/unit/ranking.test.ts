@@ -53,8 +53,20 @@ describe("clusterAt", () => {
     expect(c.enterprise).toBe(1);
     expect(c.noVolume).toBe(1);
   });
-  it("is named after the locality with the most volume and centred on the cell", () => {
+  it("is named after the locality nearest its centre, and centred on the cell", () => {
     expect(c.name).toBe("Morón");
+    const castelar = latLngToCell(-34.65, -58.665, 8);
+    const off = clusterAt(
+      castelar,
+      bucketByCell([
+        mk("c", 200, { ...at(-34.65, -58.665), locality: "Castelar" }),
+        mk("m", 4000, at(-34.652, -58.635)),
+      ]),
+      radiusToK(5),
+      5000,
+    );
+    expect(off.volume).toBe(4200);
+    expect(off.name).toBe("Castelar"); // Morón has more volume but is ~3 km away
     const [lat, lng] = cellToLatLng(c.cell);
     expect([c.lat, c.lng]).toEqual([lat, lng]);
     expect(c.needed.enough).toBe(false);
@@ -127,12 +139,16 @@ describe("rankHubs caps each hub at the target", () => {
     const claimed = r.picks.flatMap((p) => p.needed.picks.map((s) => s.id));
     expect(new Set(claimed).size).toBe(claimed.length);
     for (const p of r.picks)
-      expect(p.needed.enough || p.needed.picks.length === p.sellers.length).toBe(true);
+      expect(
+        p.needed.enough || p.needed.picks.length === p.sellers.length,
+      ).toBe(true);
   });
 
   it("no hub is centred inside an earlier hub's radius", () => {
     for (let i = 0; i < r.picks.length; i++)
       for (let j = i + 1; j < r.picks.length; j++)
-        expect(gridDistance(r.picks[i].cell, r.picks[j].cell)).toBeGreaterThan(k);
+        expect(gridDistance(r.picks[i].cell, r.picks[j].cell)).toBeGreaterThan(
+          k,
+        );
   });
 });

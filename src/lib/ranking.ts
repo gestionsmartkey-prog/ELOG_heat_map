@@ -3,6 +3,7 @@ import {
   cellToParent,
   getHexagonEdgeLengthAvg,
   gridDisk,
+  gridDistance,
 } from "h3-js";
 import type { MapSeller } from "./types";
 import {
@@ -59,6 +60,25 @@ export type Cluster = {
   needed: Needed;
 };
 
+/**
+ * A spot is named after the locality nearest its centre (most volume among the closest sellers).
+ * Naming by the most volume in the whole radius gave neighbouring hubs the same name, because
+ * approximate sellers stack on a few locality centres (Balvanera, La Matanza).
+ */
+function nearestLocality(cell: string, sellers: MapSeller[]): string {
+  let best = Infinity;
+  let closest: MapSeller[] = [];
+  for (const s of sellers) {
+    if (!s.h3_r9 || !(s.locality ?? s.partido)) continue;
+    const d = gridDistance(cell, cellToParent(s.h3_r9, HUB_RES));
+    if (d < best) {
+      best = d;
+      closest = [s];
+    } else if (d === best) closest.push(s);
+  }
+  return topLocality(closest);
+}
+
 function topLocality(sellers: MapSeller[]): string {
   const byName = new Map<string, number>();
   for (const s of sellers) {
@@ -99,7 +119,7 @@ export function buildCluster(
     cell,
     lat,
     lng,
-    name: topLocality(sellers),
+    name: nearestLocality(cell, all),
     volume,
     exactVolume,
     share: volume / target,
