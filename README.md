@@ -10,7 +10,7 @@ client export (.xlsx/.csv) → ingest pipeline → Supabase → /api/sellers →
 
 - **Ingest** (`src/ingest`, no Next.js dependency): parse → map headers by alias → normalize → classify kind → split the free-text note (phone, hours, alternate address) → dedupe doors → geocode → upsert. Every source row is kept verbatim in `raw_rows`; every file is a row in `import_batches`; anything odd lands in `review_items` instead of failing the run.
 - **Storage** (`supabase/migrations`): `locations` (one row per door), `sellers` (many per door), `seller_metrics` (metrics as rows, so volume later needs no schema change), `geocode_cache`, `review_items`, `seller_kinds` (kinds are data, not an enum).
-- **Map**: the browser gets all active sellers once and does everything else with h3-js: hex aggregation at a zoom-dependent resolution (7 metro, 8 city, 9 street), quantile bins with labelled ranges, k-ring catchment on hover, kind filters, metric switching. Adding a metric is one entry in `src/lib/metrics.ts`.
+- **Map** (hub opportunities): the browser receives all active sellers once (read in pages, since PostgREST caps a response at 1,000 rows), filters them (`src/lib/filters.ts`, default «Prospecto Flex»: chico + core, Flex sí + probable) and ranks hub candidates in a Web Worker (`src/lib/ranking.ts`): greedy coverage on res-8 hexes within a 3 / 5 / 8 km radius, where each hub claims only the largest sellers it needs to reach the target, no hub is centred inside another's radius, and each seller counts once. Sellers are banded micro <100, chico 100–999, core 1,000–5,000 and enterprise >5,000 paq/mes; enterprise never counts (`src/lib/opportunity.ts`). Hexes are coloured by the share of the target (default 5,000 paq/mes, editable) reachable from them, with fixed breaks. The view (target, radius, filters, position) is in the URL, so it can be shared.
 
 ## Importar desde el navegador
 
@@ -38,12 +38,12 @@ Todos los valores visuales salen de tokens en `src/app/globals.css`; no se usan 
 - **Radios (esquinas)** — sólo cuatro: `rounded-field` (4px, campos/chips), `rounded-button` (8px, botones y tarjetas chicas), `rounded-card` (16px, tarjetas/tablas/hoja móvil), `rounded-pill` (999px, píldoras y puntos). Nada de radios arbitrarios.
 - **Sombras** — `shadow-ctrl`, `shadow-card`, `shadow-pop`, `shadow-modal` (una sola fuente para toda la elevación).
 - **Tipografía** — utilidades `t-h3`, `t-dato`, `t-etiqueta`, `t-display`, `t-display-lg`, `t-meta` (13px), `t-micro` (12px), `tnum`.
-- **Layout** — dimensiones en `:root`: `--size-logo`, `--panel-w/-min/-max`, `--panel-sheet-max`, `--queue-w`, `--gutter` / `--gutter-lg`.
+- **Layout** — dimensiones en `:root`: `--size-logo`, `--panel-w/-min/-max`, `--panel-sheet-max`, `--panel-sheet-peek`, `--queue-w`, `--gutter` / `--gutter-lg`.
 - **Breakpoints** — móvil (base), tablet (`md`, ≥768px), escritorio (`lg`, ≥1024px).
 
 ## Responsive
 
-- **Mapa** (`/`): en escritorio, mapa + panel lateral; en móvil el panel es una hoja inferior que aparece al seleccionar un área. La barra superior pliega los controles del mapa en «Filtros» y la navegación en «Menú».
+- **Mapa** (`/`): en escritorio, mapa + panel lateral; en móvil el panel es una hoja inferior que siempre asoma el top de oportunidades y se agranda al abrir un cluster. Objetivo, radio y filtros flotan sobre el mapa y en móvil se pliegan en «Ajustes»; la navegación está en «Menú».
 - **Revisar** (`/revisar`): lista + mapa lado a lado en escritorio; en móvil se ve la lista y, al elegir un domicilio, el mapa a pantalla completa con «← Volver a la lista».
 - **Importar / Usuarios**: contenido centrado con márgenes por token; las tablas hacen scroll horizontal en pantallas chicas.
 - Verificado sin scroll horizontal a 390 / 834 / 1440 px: `npm run test:responsive` (con el server en `DATA_SOURCE=fixture`).
@@ -79,8 +79,9 @@ A file with different column names needs an alias in `src/ingest/headers.ts`, no
 ```bash
 npm run typecheck && npm run lint && npm test     # unit tests for the pipeline
 DATA_SOURCE=fixture APP_PASSWORD=demo-password npm run build && npm start
-npm run export:fixture                            # snapshot the database into data/fixtures/sellers.json (kept out of git)
-PW_CHROMIUM=/path/to/chromium npm run test:e2e   # login gate, map, panel, metric switch; writes screenshots to data/out/shots
+npx tsx --env-file=.env.local scripts/export-fixture.ts   # = npm run export:fixture with .env.local loaded; snapshot into data/fixtures/sellers.json (kept out of git)
+PW_CHROMIUM=/path/to/chromium npm run test:e2e   # login gate, ranked list, cluster panel, radius in the URL, filters; writes screenshots to data/out/shots
+PW_CHROMIUM=/path/to/chromium npm run test:responsive
 ```
 
 ## Deploy
