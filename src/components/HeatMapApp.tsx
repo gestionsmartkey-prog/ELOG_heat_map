@@ -42,6 +42,8 @@ export function HeatMapApp({ initialQuery }: { initialQuery: string }) {
   const [selection, setSelection] = useState<Selection>(null);
   const [seller, setSeller] = useState<MapSeller | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
+  // The panel starts collapsed so the map gets the full width; opening a spot expands it.
+  const [panelOpen, setPanelOpen] = useState(false);
   // The map reads its start position once; later moves only update the URL.
   const [initialView] = useState(() => ({
     center: view.center,
@@ -94,7 +96,8 @@ export function HeatMapApp({ initialQuery }: { initialQuery: string }) {
     [filtered],
   );
   const exact = useMemo(() => filtered?.kept.filter(isExact) ?? [], [filtered]);
-  const pins = useMemo(() => ranking?.picks.slice(0, 5) ?? [], [ranking]);
+  // Every ranked spot gets its pin, so the map and the list always match.
+  const pins = useMemo(() => ranking?.picks ?? [], [ranking]);
 
   // A change of target, radius or filters invalidates what is open in the panel.
   const viewKey = `${view.target}|${view.radiusKm}|${JSON.stringify(view.filters)}`;
@@ -129,6 +132,7 @@ export function HeatMapApp({ initialQuery }: { initialQuery: string }) {
     (cell: string) => {
       if (!buckets) return;
       setSeller(null);
+      setPanelOpen(true);
       setSelection({
         kind: "cell",
         cluster: clusterAt(
@@ -148,6 +152,7 @@ export function HeatMapApp({ initialQuery }: { initialQuery: string }) {
   );
   const onPinClick = useCallback((rank: number) => {
     setSeller(null);
+    setPanelOpen(true);
     setSelection({ kind: "pick", rank });
   }, []);
 
@@ -201,35 +206,68 @@ export function HeatMapApp({ initialQuery }: { initialQuery: string }) {
             </>
           )}
         </div>
-        {/* Panel: barra lateral en md+, hoja inferior en móvil que siempre asoma el top 3. */}
-        <div
-          className={`flex flex-col bg-white md:w-[var(--panel-w)] md:min-w-[var(--panel-min)] md:max-w-[var(--panel-max)] md:border-l md:border-gris-200 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:rounded-t-card max-md:border-t max-md:border-gris-200 max-md:shadow-pop ${cluster ? "max-md:h-[var(--panel-sheet-max)]" : "max-md:max-h-[var(--panel-sheet-peek)]"}`}
-        >
-          <div className="flex items-center justify-center py-2 md:hidden">
-            <span className="sheet-grabber" aria-hidden="true" />
+        {/* Panel: barra lateral en md+, hoja inferior en móvil. Arranca plegado: una franja (md+) o una barra abajo (móvil). */}
+        {!panelOpen ? (
+          <div className="flex bg-white md:w-12 md:border-l md:border-gris-200 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:rounded-t-card max-md:border-t max-md:border-gris-200 max-md:shadow-pop">
+            <button
+              type="button"
+              onClick={() => setPanelOpen(true)}
+              aria-expanded={false}
+              aria-label="Mostrar oportunidades"
+              className="t-etiqueta flex min-h-12 w-full items-center justify-center gap-2 py-3 text-gris-700 hover:bg-papel hover:text-carbon md:h-full md:flex-col md:py-4"
+              data-testid="panel-toggle"
+            >
+              <span className="md:hidden">
+                Top oportunidades
+                {ranking ? ` · ${ranking.picks.length}` : ""} ▴
+              </span>
+              <span className="hidden md:block" aria-hidden="true">
+                ‹
+              </span>
+              <span className="hidden [writing-mode:vertical-rl] md:block">
+                Top oportunidades
+                {ranking ? ` · ${ranking.picks.length}` : ""}
+              </span>
+            </button>
           </div>
-          {seller && cluster ? (
-            <SellerDetail seller={seller} onBack={() => setSeller(null)} />
-          ) : cluster ? (
-            <ClusterPanel
-              cluster={cluster}
-              radiusKm={view.radiusKm}
-              target={view.target}
-              claimedBy={ranking?.claimedBy ?? new Map()}
-              excluded={filtered?.excluded ?? NO_EXCLUDED}
-              onBack={() => setSelection(null)}
-              onSeller={setSeller}
-            />
-          ) : (
-            <OpportunityList
-              picks={ranking?.picks ?? null}
-              radiusKm={view.radiusKm}
-              hovered={hovered}
-              onHover={setHovered}
-              onOpen={(p) => setSelection({ kind: "pick", rank: p.rank })}
-            />
-          )}
-        </div>
+        ) : (
+          <div
+            className={`flex flex-col bg-white md:w-[var(--panel-w)] md:min-w-[var(--panel-min)] md:max-w-[var(--panel-max)] md:border-l md:border-gris-200 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:rounded-t-card max-md:border-t max-md:border-gris-200 max-md:shadow-pop ${cluster ? "max-md:h-[var(--panel-sheet-max)]" : "max-md:max-h-[var(--panel-sheet-peek)]"}`}
+          >
+            <button
+              type="button"
+              onClick={() => setPanelOpen(false)}
+              aria-expanded={true}
+              aria-label="Ocultar panel"
+              className="t-micro flex items-center justify-center gap-2 py-2 text-gris-700 hover:text-carbon md:justify-end md:border-b md:border-gris-200 md:px-4 lg:px-6"
+              data-testid="panel-toggle"
+            >
+              <span className="sheet-grabber md:hidden" aria-hidden="true" />
+              <span className="hidden md:inline">Ocultar panel ›</span>
+            </button>
+            {seller && cluster ? (
+              <SellerDetail seller={seller} onBack={() => setSeller(null)} />
+            ) : cluster ? (
+              <ClusterPanel
+                cluster={cluster}
+                radiusKm={view.radiusKm}
+                target={view.target}
+                claimedBy={ranking?.claimedBy ?? new Map()}
+                excluded={filtered?.excluded ?? NO_EXCLUDED}
+                onBack={() => setSelection(null)}
+                onSeller={setSeller}
+              />
+            ) : (
+              <OpportunityList
+                picks={ranking?.picks ?? null}
+                radiusKm={view.radiusKm}
+                hovered={hovered}
+                onHover={setHovered}
+                onOpen={(p) => setSelection({ kind: "pick", rank: p.rank })}
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

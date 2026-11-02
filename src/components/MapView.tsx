@@ -68,7 +68,7 @@ type Props = {
   scores: Map<string, number> | null;
   target: number;
   radiusKm: number;
-  /** Top picks shown as numbered pins. */
+  /** Every ranked spot, shown as a numbered pin. */
   pins: Pick[];
   /** Door-level prospects, dots at street zoom. */
   exact: MapSeller[];

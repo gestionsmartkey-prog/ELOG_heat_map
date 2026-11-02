@@ -30,7 +30,7 @@ await page.fill("#password", password);
 await page.click("button[type=submit]");
 await page.waitForURL((u) => u.pathname === "/");
 await page.waitForSelector('[data-testid="map"][data-ready="1"]', { timeout: 30000 });
-await page.waitForSelector('[data-testid="opportunity-row"]', { timeout: 30000 });
+await page.waitForSelector('[data-testid="map-pin"]', { timeout: 30000 });
 
 const overflow = async () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 
@@ -43,10 +43,16 @@ for (const { name, w, h } of widths) {
   await page.screenshot({ path: `${out}/resp-${name}.png` });
 }
 
-// Mobile bottom sheet: with nothing selected it peeks the ranked list; a row opens the cluster in the sheet.
+// Mobile bottom sheet: collapsed it is a bar at the bottom; opened it peeks the ranked list; a row opens the cluster in the sheet.
 await page.setViewportSize({ width: 390, height: 844 });
 await page.waitForTimeout(500);
 const vh = 844;
+const bar = await page.locator('[data-testid="panel-toggle"]').boundingBox();
+console.log(`mobile collapsed bar: top=${Math.round(bar.y)} height=${Math.round(bar.height)}`);
+if (bar.y + bar.height < vh - 2 || bar.height < 40) throw new Error("collapsed panel bar not at the bottom or under 40px");
+await page.screenshot({ path: `${out}/resp-mobile-collapsed.png` });
+await page.click('[data-testid="panel-toggle"]');
+await page.waitForSelector('[data-testid="opportunity-row"]');
 const list = await page.locator('[data-testid="opportunity-list"]').boundingBox();
 console.log(`mobile peek: top=${Math.round(list.y)} bottom=${Math.round(list.y + list.height)} viewport=${vh}`);
 if (list.y + list.height < vh - 2) throw new Error("ranked list not anchored to bottom on mobile");

@@ -43,10 +43,14 @@ const legend = await page.textContent('[data-testid="legend"]');
 if (!legend?.includes("% del objetivo")) throw new Error("legend is not on the opportunity scale: " + legend);
 await page.screenshot({ path: `${out}/01-metro.png` });
 
-// 4. Ranked list renders and opens a cluster
+// 4. The panel starts collapsed; opening it shows the ranked list, one map pin per row, and a row opens a cluster
+if (await page.locator('[data-testid="opportunity-list"]').count()) throw new Error("panel should start collapsed");
+await page.click('[data-testid="panel-toggle"]');
 await page.waitForSelector('[data-testid="opportunity-row"]', { timeout: 30000 });
 const rows = await page.locator('[data-testid="opportunity-row"]').count();
 if (!rows) throw new Error("no opportunities ranked");
+const pins = await page.locator('[data-testid="map-pin"]').count();
+if (pins !== rows) throw new Error(`map shows ${pins} pins for ${rows} ranked spots`);
 console.log("opportunities:", rows, "| first:", (await page.locator('[data-testid="opportunity-row"]').first().textContent())?.replace(/\s+/g, " "));
 await page.locator('[data-testid="opportunity-row"]').first().click();
 await page.waitForSelector('[data-testid="panel-cell"]');
@@ -67,6 +71,12 @@ await page.click('[data-testid="radius-8"]');
 await page.waitForFunction(() => location.search.includes("r=8"));
 await page.reload();
 await page.waitForSelector('[data-testid="radius-8"][aria-pressed="true"]');
+await page.waitForSelector('[data-testid="map-pin"]', { timeout: 30000 });
+
+// A pin opens its spot and expands the collapsed panel
+await page.locator('[data-testid="map-pin"]').first().click();
+await page.waitForSelector('[data-testid="panel-cell"]');
+await page.getByText("← Oportunidades").click();
 await page.waitForSelector('[data-testid="opportunity-row"]', { timeout: 30000 });
 
 // 7. Filters: clearing them adds sellers to the header count
