@@ -60,7 +60,19 @@ Popover from the dock, one row per filter: Tamaño (Micro / Chico / Core), Candi
 
 ## 4. Ranked list and cluster panel
 
-**Ranking.** Every populated res-8 hex is a candidate hub centre. For each, sum countable volume (passes filters, not enterprise, not lost) within the radius. Pick the best, suppress candidates whose centre falls inside an already picked radius, repeat. Name each pick after the locality with the most volume in it. Sort by "Más volumen" (default) or "Menos sellers" (fewest wins to reach the target).
+**Ranking (greedy coverage).**
+
+1. Every res-8 hex (about 0.9 km across) within the radius of any countable seller is a candidate hub centre — empty hexes included, since the best spot is often between two clusters.
+2. Score each candidate: countable volume (passes filters, not enterprise, not lost, not yet claimed) within the radius. The radius is a hex disk: 3 km ≈ k3, 5 km ≈ k5 (91 cells), 8 km ≈ k9.
+3. Pick the highest score. Ties go to the candidate with more exact-door volume.
+4. **Claim** the sellers inside the pick's radius; they are removed from every other candidate, so each package counts once. A claimed seller shows "en hub #N" in other clusters.
+5. Re-score the candidates near the pick and repeat, until 10 picks or the best remaining score is below 25% of the target.
+
+Name each pick after the locality with the most volume in it. "Más volumen" (default) keeps pick order; "Menos sellers" re-sorts the same picks by wins needed — it never picks different spots.
+
+The ranking runs in the browser, in a Web Worker, and re-runs on every change of target, radius or filters (tens of milliseconds at today's size). It moves to SQL only if data grows past ~100k sellers or something other than the map needs it.
+
+**On the map.** The top 5 picks show as numbered pins (1–5) at their centres, matching the list; no circles by default so the heat stays readable. Hovering a pin or a list row draws its circle dashed; clicking makes it solid, keeps it, and opens the cluster. Saved hubs always show their progress ring.
 
 Row: `1 Morón · 112% · 5.600 paq/mes · necesitás 4 (2 core + 2 chicos)`. "Necesitás N" is greedy: largest sellers first until the target is met.
 
@@ -108,7 +120,7 @@ Catchment and ranking stay in the browser (about 9k sellers × 91 hexes at 5 km 
 
 ## Testing
 
-- Unit (vitest): band assignment, catchment sum, ranking with suppression, greedy "sellers needed", filter matching (including missing attributes), export row shape, round-trip parsing.
+- Unit (vitest): band assignment, catchment sum, ranking with claiming (no seller counted twice, stop rule, tie-break), greedy "sellers needed", filter matching (including missing attributes), export row shape, round-trip parsing.
 - Migrations: applied on a Supabase preview branch; backfill counts checked against the numbers above (309 merged, 328 without volume).
 - E2E (existing scripts against `DATA_SOURCE=fixture`): ranked list renders, row opens cluster, filters change the ranking, URL restores the view, responsive at 390 / 834 / 1440 px.
 
