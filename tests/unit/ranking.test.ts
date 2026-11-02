@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cellToLatLng, gridDisk, latLngToCell } from "h3-js";
+import { cellToLatLng, gridDisk, gridDistance, latLngToCell } from "h3-js";
 import {
   bucketByCell,
   clusterAt,
@@ -81,14 +81,13 @@ describe("rankHubs", () => {
   ];
   const r = rankHubs(sellers, { target: 5000, radiusKm: 5 });
 
-  it("picks the biggest pool first and never counts a seller twice", () => {
+  it("picks the biggest pool first and never claims a seller twice", () => {
     const names = r.picks.map((p) => p.name);
     expect(names[0]).toBe("Morón");
     expect(names).toContain("Urquiza");
-    const ids = r.picks.flatMap((p) => p.sellers.map((s) => s.id));
-    expect(new Set(ids).size).toBe(ids.length);
-    const total = r.picks.reduce((sum, p) => sum + p.volume, 0);
-    expect(total).toBeLessThanOrEqual(6000 + 4400 + 1200);
+    const claimed = r.picks.flatMap((p) => p.needed.picks.map((s) => s.id));
+    expect(new Set(claimed).size).toBe(claimed.length);
+    expect([...r.claimedBy.keys()].sort()).toEqual([...claimed].sort());
   });
 
   it("stops below 25% of the target", () => {
@@ -105,5 +104,35 @@ describe("rankHubs", () => {
     expect(
       rankHubs(sellers, { target: 1000, radiusKm: 3, maxPicks: 2 }).picks,
     ).toHaveLength(2);
+  });
+});
+
+describe("rankHubs caps each hub at the target", () => {
+  // Six sellers in a 5 km line through Morón, biggest in the middle; together they fill three hubs of 2,500.
+  const vols = [1000, 1200, 1500, 1400, 1300, 1100];
+  const line = vols.map((v, i) =>
+    mk(`M${i}`, v, at(-34.653, -58.64 + i * 0.009)),
+  );
+  const k = radiusToK(5);
+  const r = rankHubs(line, { target: 2500, radiusKm: 5 });
+
+  it("a hub claims only the sellers it needs, biggest first", () => {
+    expect(r.picks[0].needed.picks.map((s) => s.id)).toEqual(["M2", "M3"]);
+    expect([...r.claimedBy].filter(([, rank]) => rank === 1)).toHaveLength(2);
+  });
+
+  it("what a hub leaves feeds later hubs, each claim reaching the target or taking what is left", () => {
+    expect(r.picks.length).toBeGreaterThanOrEqual(2);
+    expect(r.claimedBy.size).toBeGreaterThan(2);
+    const claimed = r.picks.flatMap((p) => p.needed.picks.map((s) => s.id));
+    expect(new Set(claimed).size).toBe(claimed.length);
+    for (const p of r.picks)
+      expect(p.needed.enough || p.needed.picks.length === p.sellers.length).toBe(true);
+  });
+
+  it("no hub is centred inside an earlier hub's radius", () => {
+    for (let i = 0; i < r.picks.length; i++)
+      for (let j = i + 1; j < r.picks.length; j++)
+        expect(gridDistance(r.picks[i].cell, r.picks[j].cell)).toBeGreaterThan(k);
   });
 });

@@ -137,8 +137,9 @@ export type RankOptions = {
 
 /**
  * Greedy coverage (design doc §4): score every res-8 cell within the radius of a seller,
- * take the best, claim its sellers, subtract them from every score they fed, repeat.
- * Each package counts once.
+ * take the best, let it claim the sellers it needs to reach the target (largest first),
+ * subtract them from every score they fed, block hub centres inside its radius, repeat.
+ * Each package counts once; sellers a hub does not need stay available to the hubs around it.
  */
 export function rankHubs(
   sellers: MapSeller[],
@@ -188,20 +189,35 @@ export function rankHubs(
     if (!best || bs.v <= 0 || bs.v < minShare * target) break;
     const disk = gridDisk(best, k);
     const rank = picks.length + 1;
-    picks.push({ ...buildCluster(best, disk, live, target), rank });
-    for (const n of disk) {
-      const b = live.get(n);
-      if (!b) continue;
-      for (const s of b.sellers) claimedBy.set(s.id, rank);
-      live.delete(n);
-      for (const m of disks.get(n) ?? []) {
+    const pick: Pick = { ...buildCluster(best, disk, live, target), rank };
+    picks.push(pick);
+
+    // A hub holds one target: it claims only the sellers it needs, the rest stay for the hubs around it.
+    const byCell = new Map<string, Set<string>>();
+    for (const s of pick.needed.picks) {
+      claimedBy.set(s.id, rank);
+      const cell = cellToParent(s.h3_r9!, HUB_RES);
+      byCell.set(cell, (byCell.get(cell) ?? new Set()).add(s.id));
+    }
+    for (const [cell, ids] of byCell) {
+      const b = live.get(cell)!;
+      const rest = b.sellers.filter((s) => !ids.has(s.id));
+      const next = bucketByCell(rest).get(cell) ?? {
+        volume: 0,
+        exact: 0,
+        sellers: [],
+      };
+      live.set(cell, next);
+      for (const m of disks.get(cell) ?? []) {
         const s = score.get(m);
         if (s) {
-          s.v -= b.volume;
-          s.e -= b.exact;
+          s.v -= b.volume - next.volume;
+          s.e -= b.exact - next.exact;
         }
       }
     }
+    // No later hub is centred inside this one's radius, so the picks are distinct places.
+    for (const n of disk) score.delete(n);
   }
   return { picks, scores, claimedBy };
 }
