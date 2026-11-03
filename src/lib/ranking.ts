@@ -33,7 +33,7 @@ export function bucketByCell(sellers: MapSeller[]): Map<string, CellBucket> {
   const out = new Map<string, CellBucket>();
   for (const s of sellers) {
     if (!s.h3_r9) continue;
-    const cell = cellToParent(s.h3_r9, HUB_RES);
+    const cell = s.h3_r8 ?? cellToParent(s.h3_r9, HUB_RES);
     const b = out.get(cell) ?? { volume: 0, exact: 0, sellers: [] };
     const v = countableVolume(s);
     b.volume += v;

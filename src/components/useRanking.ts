@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { setBands, type BandRule } from "@/lib/opportunity";
 import { rankHubs, type Ranking } from "@/lib/ranking";
 import type { MapSeller } from "@/lib/types";
 
@@ -9,6 +10,7 @@ export function useRanking(
   sellers: MapSeller[] | null,
   target: number,
   radiusKm: number,
+  bands: BandRule[] | undefined,
 ): Ranking | null {
   const [ranking, setRanking] = useState<Ranking | null>(null);
   const workerRef = useRef<Worker | null>(null);
@@ -50,15 +52,16 @@ export function useRanking(
     const id = ++reqId.current;
     const w = workerRef.current;
     if (w) {
-      w.postMessage({ id, sellers, target, radiusKm });
+      w.postMessage({ id, sellers, target, radiusKm, bands });
       return;
     }
     const t = setTimeout(() => {
-      if (id === reqId.current)
-        setRanking(rankHubs(sellers, { target, radiusKm }));
+      if (id !== reqId.current) return;
+      setBands(bands);
+      setRanking(rankHubs(sellers, { target, radiusKm }));
     }, 0);
     return () => clearTimeout(t);
-  }, [sellers, target, radiusKm]);
+  }, [sellers, target, radiusKm, bands]);
 
   return ranking;
 }

@@ -1,3 +1,4 @@
+import { setBands, type BandRule } from "./opportunity";
 import { rankHubs } from "./ranking";
 import type { MapSeller } from "./types";
 
@@ -6,6 +7,7 @@ export type RankRequest = {
   sellers: MapSeller[];
   target: number;
   radiusKm: number;
+  bands?: BandRule[];
 };
 
 const ctx = self as unknown as {
@@ -13,7 +15,9 @@ const ctx = self as unknown as {
   postMessage: (m: unknown) => void;
 };
 ctx.onmessage = (e) => {
-  const { id, sellers, target, radiusKm } = e.data;
+  const { id, sellers, target, radiusKm, bands } = e.data;
+  // The worker has its own copy of the module: give it the same bands as the main thread.
+  setBands(bands);
   const r = rankHubs(sellers, { target, radiusKm });
   ctx.postMessage({
     id,

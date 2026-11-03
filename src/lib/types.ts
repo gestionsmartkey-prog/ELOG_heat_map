@@ -1,3 +1,5 @@
+import type { BandRule } from "./opportunity";
+
 /** Compact seller record served to the map. No phone, no raw note. */
 export type MapSeller = {
   id: string;
@@ -18,6 +20,8 @@ export type MapSeller = {
   lat: number | null;
   lng: number | null;
   h3_r9: string | null;
+  /** Hub-grid cell (res 8), precomputed by the database. Absent in older fixtures. */
+  h3_r8?: string | null;
   geocode_status: string | null;
   /** Piso / depto inside a shared door. Absent in older fixtures. */
   unit?: string | null;
@@ -47,6 +51,8 @@ export type SellersResponse = {
   kinds: { kind: string; label: string; counts_as_seller: boolean; color: string | null }[];
   batches: BatchSummary[];
   stats: { total: number; located: number; unlocated: number; open_reviews: number };
+  /** Size bands from public.size_bands. Absent in older fixtures (defaults apply). */
+  bands?: BandRule[];
   generated_at: string;
   /** Username from the session cookie; set by the API route, absent in fixtures. */
   viewer?: string | null;
