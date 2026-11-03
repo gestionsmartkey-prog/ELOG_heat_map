@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   bandOf,
   countableVolume,
+  DEFAULT_BANDS,
   isExact,
   isReference,
   sellersNeeded,
+  setBands,
   shareBin,
   volumeOf,
 } from "../../src/lib/opportunity";
@@ -70,5 +72,85 @@ describe("opportunity bins", () => {
       "100%+",
       "100%+",
     ]);
+  });
+});
+
+describe("bands from data", () => {
+  afterEach(() => setBands(undefined));
+
+  it("defaults to the phase-1 thresholds", () => {
+    expect(DEFAULT_BANDS.map((b) => [b.band, b.min_value])).toEqual([
+      ["micro", 0],
+      ["chico", 100],
+      ["core", 1000],
+      ["enterprise", 5001],
+    ]);
+  });
+
+  it("follows bands served by the API", () => {
+    setBands([
+      {
+        band: "micro",
+        label: "Micro",
+        min_value: 0,
+        counts_toward_target: true,
+        sort: 1,
+      },
+      {
+        band: "chico",
+        label: "Chico",
+        min_value: 50,
+        counts_toward_target: true,
+        sort: 2,
+      },
+      {
+        band: "core",
+        label: "Core",
+        min_value: 500,
+        counts_toward_target: true,
+        sort: 3,
+      },
+      {
+        band: "enterprise",
+        label: "Enterprise",
+        min_value: 3001,
+        counts_toward_target: false,
+        sort: 4,
+      },
+    ]);
+    expect([49, 50, 499, 500, 3000, 3001].map(bandOf)).toEqual([
+      "micro",
+      "chico",
+      "chico",
+      "core",
+      "core",
+      "enterprise",
+    ]);
+    expect(countableVolume(mk("1", 3500))).toBe(0);
+  });
+
+  it("lets a band stop counting toward the target", () => {
+    setBands(
+      DEFAULT_BANDS.map((b) =>
+        b.band === "micro" ? { ...b, counts_toward_target: false } : b,
+      ),
+    );
+    expect(countableVolume(mk("1", 40))).toBe(0);
+    expect(countableVolume(mk("2", 400))).toBe(400);
+  });
+
+  it("ignores unknown or empty band lists", () => {
+    setBands([]);
+    expect(bandOf(5000)).toBe("core");
+    setBands([
+      {
+        band: "huge" as never,
+        label: "?",
+        min_value: 0,
+        counts_toward_target: true,
+        sort: 1,
+      },
+    ]);
+    expect(bandOf(5000)).toBe("core");
   });
 });

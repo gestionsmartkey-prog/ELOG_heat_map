@@ -10,7 +10,7 @@ import {
   type Cluster,
   type Pick,
 } from "@/lib/ranking";
-import { countableVolume, isExact } from "@/lib/opportunity";
+import { countableVolume, isExact, setBands } from "@/lib/opportunity";
 import { decodeView, encodeView, type ViewState } from "@/lib/viewState";
 import type { MapSeller, SellersResponse } from "@/lib/types";
 import { TopBar } from "./TopBar";
@@ -62,7 +62,10 @@ export function HeatMapApp({ initialQuery }: { initialQuery: string }) {
         return r.json();
       })
       .then((j) => {
-        if (!cancelled && j) setData(j as SellersResponse);
+        if (cancelled || !j) return;
+        // Bands first: filtering runs bandOf as soon as the data is set.
+        setBands((j as SellersResponse).bands);
+        setData(j as SellersResponse);
       })
       .catch((e) => {
         if (!cancelled) setError(String(e));
@@ -90,6 +93,7 @@ export function HeatMapApp({ initialQuery }: { initialQuery: string }) {
     filtered?.kept ?? null,
     view.target,
     view.radiusKm,
+    data?.bands,
   );
   const buckets = useMemo(
     () => (filtered ? bucketByCell(filtered.kept) : null),

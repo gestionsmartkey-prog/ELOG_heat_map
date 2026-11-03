@@ -3,6 +3,9 @@ import { join } from "node:path";
 import { latLngToCell } from "h3-js";
 import { supabaseAdmin } from "./supabase";
 import { fetchAllPages } from "./paging";
+import { toMapSeller, type MapRow } from "./mapRows";
+import { bandOf, DEFAULT_BANDS, type BandRule } from "./opportunity";
+import type { ExportSeller } from "./export";
 import type { BatchSummary, MapSeller, SellersResponse } from "./types";
 
 const H3_RES = 9;
@@ -15,23 +18,28 @@ export async function getSellersResponse(): Promise<SellersResponse> {
   if (process.env.DATA_SOURCE === "fixture") return loadFixture();
 
   const sb = supabaseAdmin();
-  const [sellersRes, kindsRes, batchesRes, reviewsRes] = await Promise.all([
+  const [sellersRes, kindsRes, batchesRes, reviewsRes, bandsRes] = await Promise.all([
     // More than 1,000 sellers: read them in pages, ordered by a unique key so none repeat or go missing.
-    fetchAllPages<MapSeller>((from, to) => sb.from("map_sellers").select("*").eq("active", true).order("name").order("id").range(from, to))
-      .catch((e: Error) => { throw new Error(`map_sellers: ${e.message}`); }),
+    // The view already keeps active sellers only.
+    fetchAllPages<MapRow>((from, to) => sb.from("v_map_sellers").select("*").order("name").order("id").range(from, to))
+      .catch((e: Error) => { throw new Error(`v_map_sellers: ${e.message}`); }),
     sb.from("seller_kinds").select("kind,label,counts_as_seller,color"),
     sb.from("import_batches").select("id,filename,status,row_count,loaded_count,review_count,created_at,finished_at").order("created_at", { ascending: false }).limit(20),
     sb.from("review_items").select("id", { count: "exact", head: true }).eq("resolved", false),
+    sb.from("size_bands").select("band,label,min_value,counts_toward_target,sort").order("sort"),
   ]);
   if (kindsRes.error) throw new Error(`seller_kinds: ${kindsRes.error.message}`);
   if (batchesRes.error) throw new Error(`import_batches: ${batchesRes.error.message}`);
+  if (bandsRes.error) throw new Error(`size_bands: ${bandsRes.error.message}`);
 
-  const sellers = sellersRes.map(withH3);
+  const kinds = kindsRes.data ?? [];
+  const sellers = sellersRes.map((r) => withH3(toMapSeller(r, kinds)));
   return {
     sellers,
-    kinds: kindsRes.data ?? [],
+    kinds,
     batches: (batchesRes.data ?? []) as BatchSummary[],
     stats: buildStats(sellers, reviewsRes.count ?? 0),
+    bands: (bandsRes.data ?? []) as BandRule[],
     generated_at: new Date().toISOString(),
   };
 }
@@ -67,6 +75,64 @@ function loadFixture(): SellersResponse {
   const raw = JSON.parse(readFileSync(join(process.cwd(), "data", "fixtures", "sellers.json"), "utf8")) as SellersResponse;
   raw.sellers = raw.sellers.map(withH3);
   raw.stats = buildStats(raw.sellers, raw.stats?.open_reviews ?? 0);
+  raw.bands ??= DEFAULT_BANDS;
   fixtureCache = raw;
   return raw;
+}
+
+/** Sellers for an export, read in chunks so the `in (...)` filter stays under URL limits. */
+export async function getExportSellers(ids: string[]): Promise<ExportSeller[]> {
+  if (process.env.DATA_SOURCE === "fixture") {
+    const want = new Set(ids);
+    return loadFixture()
+      .sellers.filter((s) => want.has(s.id))
+      .map((s) => {
+        const v = s.metrics?.shipments_month ?? null;
+        const approximate = (s.precision ?? "street") !== "street";
+        return {
+          id: s.id,
+          external_id: s.external_id,
+          name: s.name,
+          profile_url: s.attrs?.profile_url ?? null,
+          phone: null,
+          address: approximate
+            ? (s.locality ?? s.partido ?? s.address_display)
+            : s.address_display,
+          approximate,
+          locality: s.locality,
+          partido: s.partido,
+          province: s.province,
+          shipments_month: v,
+          band: bandOf(v),
+          flex_candidate: s.attrs?.flex_candidate ?? null,
+          reputation: s.attrs?.reputation ?? null,
+          power_seller: s.attrs?.power_seller ?? null,
+          sources: [s.source],
+        };
+      });
+  }
+  const sb = supabaseAdmin();
+  const out: ExportSeller[] = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await sb
+      .from("v_export_sellers")
+      .select("*")
+      .in("id", ids.slice(i, i + 200));
+    if (error) throw new Error(`v_export_sellers: ${error.message}`);
+    out.push(...((data ?? []) as ExportSeller[]));
+  }
+  return out;
+}
+
+export async function logExport(entry: {
+  actor: string;
+  role: string;
+  scope: "cluster" | "hub";
+  label: string;
+  row_count: number;
+  with_phone: boolean;
+}): Promise<void> {
+  if (process.env.DATA_SOURCE === "fixture") return;
+  const { error } = await supabaseAdmin().from("export_log").insert(entry);
+  if (error) throw new Error(`export_log: ${error.message}`);
 }

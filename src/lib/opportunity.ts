@@ -19,13 +19,72 @@ export const DEFAULT_TARGET = 5000;
 export const RADII_KM = [3, 5, 8] as const;
 export const DEFAULT_RADIUS_KM = 5;
 
+/** One row of public.size_bands. A band starts at min_value and runs to the next band's start. */
+export type BandRule = {
+  band: Band;
+  label: string;
+  min_value: number;
+  counts_toward_target: boolean;
+  sort: number;
+};
+
+export const DEFAULT_BANDS: BandRule[] = [
+  {
+    band: "micro",
+    label: "Micro",
+    min_value: 0,
+    counts_toward_target: true,
+    sort: 1,
+  },
+  {
+    band: "chico",
+    label: "Chico",
+    min_value: 100,
+    counts_toward_target: true,
+    sort: 2,
+  },
+  {
+    band: "core",
+    label: "Core",
+    min_value: 1000,
+    counts_toward_target: true,
+    sort: 3,
+  },
+  {
+    band: "enterprise",
+    label: "Enterprise",
+    min_value: 5001,
+    counts_toward_target: false,
+    sort: 4,
+  },
+];
+
+let bands: BandRule[] = DEFAULT_BANDS;
+
+/**
+ * Use the bands served by /api/sellers. Called on the main thread when data arrives and in the
+ * ranking worker per request. Anything unusable falls back to the defaults.
+ */
+export function setBands(next: BandRule[] | undefined): void {
+  const ok = (next ?? []).filter(
+    (b) => b.band in BAND_LABELS && Number.isFinite(Number(b.min_value)),
+  );
+  bands = ok.length
+    ? ok
+        .map((b) => ({ ...b, min_value: Number(b.min_value) }))
+        .sort((a, b) => a.min_value - b.min_value)
+    : DEFAULT_BANDS;
+}
+
 export function bandOf(volume: number | null): Band | null {
   if (volume == null) return null;
-  if (volume < 100) return "micro";
-  if (volume < 1000) return "chico";
-  if (volume <= 5000) return "core";
-  return "enterprise";
+  let out: Band = bands[0].band;
+  for (const b of bands) if (volume >= b.min_value) out = b.band;
+  return out;
 }
+
+const countsTowardTarget = (band: Band): boolean =>
+  bands.find((b) => b.band === band)?.counts_toward_target ?? false;
 
 export const volumeOf = (s: MapSeller): number | null =>
   s.metrics?.shipments_month ?? null;
@@ -41,7 +100,8 @@ export const isExact = (s: MapSeller): boolean =>
 export function countableVolume(s: MapSeller): number {
   if (isReference(s)) return 0;
   const v = volumeOf(s);
-  if (v == null || bandOf(v) === "enterprise") return 0;
+  const band = bandOf(v);
+  if (v == null || band == null || !countsTowardTarget(band)) return 0;
   return v;
 }
 
