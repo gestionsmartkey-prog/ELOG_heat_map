@@ -4,7 +4,8 @@ import { latLngToCell } from "h3-js";
 import { supabaseAdmin } from "./supabase";
 import { fetchAllPages } from "./paging";
 import { toMapSeller, type MapRow } from "./mapRows";
-import { DEFAULT_BANDS, type BandRule } from "./opportunity";
+import { bandOf, DEFAULT_BANDS, type BandRule } from "./opportunity";
+import type { ExportSeller } from "./export";
 import type { BatchSummary, MapSeller, SellersResponse } from "./types";
 
 const H3_RES = 9;
@@ -77,4 +78,61 @@ function loadFixture(): SellersResponse {
   raw.bands ??= DEFAULT_BANDS;
   fixtureCache = raw;
   return raw;
+}
+
+/** Sellers for an export, read in chunks so the `in (...)` filter stays under URL limits. */
+export async function getExportSellers(ids: string[]): Promise<ExportSeller[]> {
+  if (process.env.DATA_SOURCE === "fixture") {
+    const want = new Set(ids);
+    return loadFixture()
+      .sellers.filter((s) => want.has(s.id))
+      .map((s) => {
+        const v = s.metrics?.shipments_month ?? null;
+        const approximate = (s.precision ?? "street") !== "street";
+        return {
+          id: s.id,
+          external_id: s.external_id,
+          name: s.name,
+          profile_url: s.attrs?.profile_url ?? null,
+          phone: null,
+          address: approximate
+            ? (s.locality ?? s.partido ?? s.address_display)
+            : s.address_display,
+          approximate,
+          locality: s.locality,
+          partido: s.partido,
+          province: s.province,
+          shipments_month: v,
+          band: bandOf(v),
+          flex_candidate: s.attrs?.flex_candidate ?? null,
+          reputation: s.attrs?.reputation ?? null,
+          power_seller: s.attrs?.power_seller ?? null,
+          sources: [s.source],
+        };
+      });
+  }
+  const sb = supabaseAdmin();
+  const out: ExportSeller[] = [];
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await sb
+      .from("v_export_sellers")
+      .select("*")
+      .in("id", ids.slice(i, i + 200));
+    if (error) throw new Error(`v_export_sellers: ${error.message}`);
+    out.push(...((data ?? []) as ExportSeller[]));
+  }
+  return out;
+}
+
+export async function logExport(entry: {
+  actor: string;
+  role: string;
+  scope: "cluster" | "hub";
+  label: string;
+  row_count: number;
+  with_phone: boolean;
+}): Promise<void> {
+  if (process.env.DATA_SOURCE === "fixture") return;
+  const { error } = await supabaseAdmin().from("export_log").insert(entry);
+  if (error) throw new Error(`export_log: ${error.message}`);
 }
