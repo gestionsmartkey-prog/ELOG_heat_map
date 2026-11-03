@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/session";
 import { createUser, listUsers, setUserActive, UserError } from "@/lib/users";
-import type { Role } from "@/lib/auth";
+import { toRole } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   try { body = await request.json(); } catch { return NextResponse.json({ error: "bad_request", message: "Se esperaba un cuerpo JSON." }, { status: 400 }); }
 
   const email = String(body.email ?? "").trim();
-  const role: Role = body.role === "admin" ? "admin" : "viewer";
+  const role = toRole(body.role);
 
   // Deactivate/reactivate path: {email, active:boolean}
   if (typeof body.active === "boolean" && body.password === undefined) {

@@ -1,5 +1,5 @@
 import { supabaseAdmin } from "./supabase";
-import type { Role, SessionInfo } from "./auth";
+import { toRole, type Role, type SessionInfo } from "./auth";
 
 export type AppUser = { email: string; role: Role; active: boolean; created_by: string | null; created_at: string };
 
@@ -11,7 +11,7 @@ export async function verifyDbUser(email: string, password: string): Promise<Ses
     const { data, error } = await sb.rpc("verify_app_user", { p_email: email, p_password: password }).maybeSingle();
     if (error || !data) return null;
     const row = data as { email: string; role: Role };
-    return { user: row.email, role: row.role === "admin" ? "admin" : "viewer" };
+    return { user: row.email, role: toRole(row.role) };
   } catch (e) {
     console.error("verifyDbUser failed", e);
     return null;

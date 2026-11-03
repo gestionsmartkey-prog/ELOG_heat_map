@@ -3,7 +3,13 @@ import { SignJWT, jwtVerify } from "jose";
 export const SESSION_COOKIE = "elog_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
-export type Role = "viewer" | "admin";
+export type Role = "viewer" | "sales" | "admin";
+
+/** Anything that is not a known role is a viewer. */
+export const toRole = (v: unknown): Role => (v === "admin" || v === "sales" ? v : "viewer");
+
+/** Phones leave the app only for admin and sales, and only in a logged export. */
+export const canSeePhone = (role: Role): boolean => role === "admin" || role === "sales";
 export type SessionInfo = { user: string; role: Role };
 
 function secret(): Uint8Array {
@@ -78,7 +84,7 @@ export async function verifySessionToken(token: string | undefined): Promise<Ses
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret(), { algorithms: ["HS256"] });
-    const role: Role = payload.role === "admin" ? "admin" : "viewer";
+    const role = toRole(payload.role);
     return { user: (payload.sub as string) ?? "team", role };
   } catch {
     return null;

@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 
 type AppUser = { email: string; role: string; active: boolean; created_by: string | null; created_at: string };
 
+const ROLE_LABELS: Record<string, string> = { admin: "Admin", sales: "Ventas", viewer: "Viewer" };
+
 export function UsersApp() {
   const [users, setUsers] = useState<AppUser[] | null>(null);
   const [forbidden, setForbidden] = useState(false);
@@ -69,7 +71,7 @@ export function UsersApp() {
                 <label className="flex flex-col gap-1"><span className="t-etiqueta text-gris-700">Contraseña</span>
                   <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} className="field" data-testid="user-password" placeholder="mínimo 8 caracteres" /></label>
                 <label className="flex flex-col gap-1"><span className="t-etiqueta text-gris-700">Rol</span>
-                  <select value={role} onChange={(e) => setRole(e.target.value)} className="field" data-testid="user-role"><option value="viewer">Viewer</option><option value="admin">Admin</option></select></label>
+                  <select value={role} onChange={(e) => setRole(e.target.value)} className="field" data-testid="user-role"><option value="viewer">Viewer</option><option value="sales">Ventas</option><option value="admin">Admin</option></select></label>
                 <button className="btn btn-primary px-4 py-2.5" disabled={busy || !email || password.length < 8} onClick={add} data-testid="user-add">Habilitar</button>
               </div>
               {msg ? <p className={`mt-2 t-meta ${msg.kind === "ok" ? "text-verde" : "text-rojo"}`} data-testid="user-msg">{msg.text}</p> : null}
@@ -82,7 +84,7 @@ export function UsersApp() {
                   {(users ?? []).map((u) => (
                     <tr key={u.email} className="border-t border-gris-200 text-carbon">
                       <td className="px-4 py-2">{u.email}</td>
-                      <td className="px-4 py-2">{u.role === "admin" ? "Admin" : "Viewer"}</td>
+                      <td className="px-4 py-2">{ROLE_LABELS[u.role] ?? u.role}</td>
                       <td className="px-4 py-2 text-gris-700">{new Date(u.created_at).toLocaleDateString("es-AR")}</td>
                       <td className="px-4 py-2">{u.active ? <span className="text-verde">Activo</span> : <span className="text-gris-700">Inactivo</span>}</td>
                       <td className="px-4 py-2 text-right"><button className="btn btn-light" onClick={() => toggle(u)}>{u.active ? "Desactivar" : "Reactivar"}</button></td>
