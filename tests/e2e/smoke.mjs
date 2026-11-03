@@ -54,6 +54,9 @@ if (pins !== rows) throw new Error(`map shows ${pins} pins for ${rows} ranked sp
 console.log("opportunities:", rows, "| first:", (await page.locator('[data-testid="opportunity-row"]').first().textContent())?.replace(/\s+/g, " "));
 await page.locator('[data-testid="opportunity-row"]').first().click();
 await page.waitForSelector('[data-testid="panel-cell"]');
+const [download] = await Promise.all([page.waitForEvent("download"), page.click('[data-testid="export"]')]);
+if (!/^elog-hub-.+\.xlsx$/.test(download.suggestedFilename())) throw new Error(`unexpected export name ${download.suggestedFilename()}`);
+console.log("export:", download.suggestedFilename());
 await page.waitForSelector('[data-testid="needed"]');
 await page.waitForTimeout(500);
 console.log("footnote:", await page.textContent('[data-testid="cluster-footnote"]'));

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Cluster } from "@/lib/ranking";
 import type { MapSeller } from "@/lib/types";
 import {
@@ -51,6 +52,44 @@ export function ClusterPanel({
   const copyLink = () => {
     void navigator.clipboard?.writeText(window.location.href);
   };
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  // The cluster's sellers as .xlsx for the sales team; the server decides on phones and logs it.
+  const exportCluster = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const r = await fetch("/api/export", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          hub: c.name,
+          radiusKm,
+          target,
+          needed: c.needed.picks.length,
+          reached: c.needed.reached,
+          seller_ids: c.sellers.map((s) => s.id),
+        }),
+      });
+      if (!r.ok)
+        throw new Error(
+          (await r.json().catch(() => null))?.message ?? `HTTP ${r.status}`,
+        );
+      const url = URL.createObjectURL(await r.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download =
+        /filename="([^"]+)"/.exec(
+          r.headers.get("content-disposition") ?? "",
+        )?.[1] ?? "elog-hub.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : "No se pudo exportar.");
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <aside
@@ -73,14 +112,30 @@ export function ClusterPanel({
             </h2>
             <p className="t-micro text-gris-700">radio {radiusKm} km</p>
           </div>
-          <button
-            type="button"
-            className="btn btn-light t-meta"
-            onClick={copyLink}
-          >
-            Copiar link
-          </button>
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              className="btn btn-light t-meta"
+              onClick={exportCluster}
+              disabled={exporting}
+              data-testid="export"
+            >
+              {exporting ? "Exportando…" : "Exportar"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-light t-meta"
+              onClick={copyLink}
+            >
+              Copiar link
+            </button>
+          </div>
         </div>
+        {exportError ? (
+          <p className="t-micro text-rojo" role="alert">
+            {exportError}
+          </p>
+        ) : null}
         <div>
           <div className="flex items-baseline gap-2">
             <span className="t-display-lg text-carbon" data-testid="hub-volume">
