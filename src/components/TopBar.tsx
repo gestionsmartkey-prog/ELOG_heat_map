@@ -1,130 +1,141 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { METRICS } from "@/lib/metrics";
-import { zoneLabel } from "@/lib/hexes";
-import { ATTR_FILTERS, PROSPECT_SOURCES, sourceLabel, type AttrSelection } from "@/lib/layers";
+import { useEffect, useRef, useState } from "react";
 import type { SellersResponse } from "@/lib/types";
+import { formatPkgs } from "@/lib/opportunity";
 
 type Props = {
   data: SellersResponse | null;
-  metricId: string;
-  onMetric: (id: string) => void;
-  enabledKinds: Set<string>;
-  onToggleKind: (kind: string) => void;
-  sources: string[];
-  enabledSources: Set<string>;
-  onToggleSource: (source: string) => void;
-  attrSel: AttrSelection;
-  onToggleAttr: (key: string, value: string) => void;
-  catchmentK: number;
-  onCatchment: (k: number) => void;
+  kpis: { sellers: number; packages: number; hubs: number } | null;
 };
 
-/**
- * Barra superior en Grafito (aplicación preferente del manual). Responsive:
- * en escritorio los controles y la navegación van en línea; en móvil se pliegan
- * en "Filtros" (controles del mapa) y "Menú" (navegación). Cada control existe una
- * sola vez en el DOM y se reordena por CSS, no se duplica.
- */
-export function TopBar({ data, metricId, onMetric, enabledKinds, onToggleKind, sources, enabledSources, onToggleSource, attrSel, onToggleAttr, catchmentK, onCatchment }: Props) {
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+/** One slim row: logo, page name, headline numbers for the current filters, one menu (design doc §1). */
+export function TopBar({ data, kpis }: Props) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent | KeyboardEvent) => {
+      if (
+        e instanceof KeyboardEvent
+          ? e.key === "Escape"
+          : !ref.current?.contains(e.target as Node)
+      )
+        setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", close);
+    };
+  }, [open]);
   const latest = data?.batches?.[0];
-  const reviewCount = data && data.stats.open_reviews > 0 ? ` (${data.stats.open_reviews})` : "";
+  const reviews = data?.stats.open_reviews ?? 0;
 
   return (
-    <header className="bg-grafito text-white shadow-ctrl">
-      {/* Fila 1: marca + navegación (una sola nav, se reordena a pantalla completa en móvil) */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-[var(--gutter)] py-2 lg:px-[var(--gutter-lg)]">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/elog-logo-white.svg" alt="ELOG" width={100} height={30} className="h-[var(--size-logo)] w-auto" />
-        <span className="t-etiqueta hidden text-white/70 sm:block">Mapa de sellers</span>
-
-        <div className="ml-auto flex items-center gap-2">
-          {data ? (
-            <span
-              className="t-dato hidden text-white/80 lg:block"
-              data-testid="stats"
-              title={latest ? `Último archivo: ${latest.filename}, ${new Date(latest.created_at).toLocaleDateString("es-AR")}` : undefined}
-            >
-              {data.stats.total} filas · {data.stats.located} ubicadas · {data.stats.open_reviews} a revisar
+    <header className="flex items-center gap-4 bg-grafito px-[var(--gutter)] py-2 text-white shadow-ctrl lg:px-[var(--gutter-lg)]">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/brand/elog-logo-white.svg"
+        alt="ELOG"
+        width={100}
+        height={30}
+        className="h-[var(--size-logo)] w-auto"
+      />
+      <span className="t-etiqueta hidden text-white/70 sm:block">
+        Oportunidades
+      </span>
+      <div
+        className="mx-auto hidden items-baseline gap-6 md:flex"
+        data-testid="stats"
+      >
+        {kpis ? (
+          <>
+            <span>
+              <b className="t-dato">{formatPkgs(kpis.sellers)}</b>{" "}
+              <span className="t-meta text-white/70">sellers</span>
             </span>
-          ) : <span className="hidden text-white/60 lg:block">Cargando…</span>}
-          {data?.viewer ? <span className="hidden text-white/80 lg:block">{data.viewer}</span> : null}
-
-          <button type="button" className="btn btn-ghost md:hidden" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((o) => !o)}>Filtros</button>
-          <button type="button" className="btn btn-ghost md:hidden" aria-expanded={menuOpen} onClick={() => setMenuOpen((o) => !o)}>Menú</button>
-        </div>
-
-        <nav className={`${menuOpen ? "flex" : "hidden"} w-full flex-col items-stretch gap-2 max-md:order-last md:flex md:w-auto md:flex-row md:items-center`}>
-          {data ? <span className="t-meta text-white/80 md:hidden">{data.stats.total} filas · {data.stats.located} ubicadas · {data.stats.open_reviews} a revisar</span> : null}
-          {data?.viewer ? <span className="t-meta text-white/70 md:hidden">{data.viewer}</span> : null}
-          <Link href="/revisar" className="btn btn-ghost text-center" data-testid="review-link">Revisar{reviewCount}</Link>
-          <Link href="/importar" className="btn btn-ghost text-center" data-testid="import-link">Importar</Link>
-          {data?.viewer_role === "admin" ? <Link href="/usuarios" className="btn btn-ghost text-center" data-testid="users-link">Usuarios</Link> : null}
-          <form method="post" action="/api/logout" className="max-md:w-full"><button className="btn btn-ghost w-full">Salir</button></form>
-        </nav>
+            <span>
+              <b className="t-dato">{formatPkgs(kpis.packages)}</b>{" "}
+              <span className="t-meta text-white/70">paq/mes</span>
+            </span>
+            <span>
+              <b className="t-dato">{kpis.hubs}</b>{" "}
+              <span className="t-meta text-white/70">oportunidades</span>
+            </span>
+          </>
+        ) : (
+          <span className="text-white/60">Cargando…</span>
+        )}
       </div>
-
-      {/* Controles del mapa: en línea en md+, plegables en móvil (una sola instancia) */}
-      <div className={`${filtersOpen ? "flex" : "hidden"} flex-col gap-2 px-[var(--gutter)] pb-2 md:flex md:flex-row md:flex-wrap md:items-center md:gap-x-6 md:gap-y-2 md:pb-2 lg:px-[var(--gutter-lg)]`}>
-        <label className="flex items-center gap-2">
-          <span className="t-meta text-white/80">Métrica</span>
-          <select value={metricId} onChange={(e) => onMetric(e.target.value)} className="select-dark max-md:flex-1" data-testid="metric-select">
-            {METRICS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-          </select>
-        </label>
-
-        <div className="flex flex-wrap items-center gap-2" data-testid="kind-filters">
-          <span className="t-meta text-white/80">Mostrar</span>
-          {(data?.kinds ?? []).map((k) => (
-            <label key={k.kind} className={`pill t-meta flex cursor-pointer items-center gap-2 border px-2 py-1 ${enabledKinds.has(k.kind) ? "border-white/60 bg-white/10" : "border-white/25 text-white/60"}`}>
-              <input type="checkbox" className="sr-only" checked={enabledKinds.has(k.kind)} onChange={() => onToggleKind(k.kind)} />
-              <span className="inline-block h-2.5 w-2.5 rounded-pill" style={{ background: k.color ?? "#A3A09E" }} />
-              <span>{k.label}</span>
-            </label>
-          ))}
-        </div>
-
-        {sources.length > 1 ? (
-          <div className="flex flex-wrap items-center gap-2" data-testid="source-filters">
-            <span className="t-meta text-white/80">Fuente</span>
-            {sources.map((src) => (
-              <label key={src} className={`pill t-meta flex cursor-pointer items-center gap-2 border px-2 py-1 ${enabledSources.has(src) ? "border-white/60 bg-white/10" : "border-white/25 text-white/60"}`}>
-                <input type="checkbox" className="sr-only" checked={enabledSources.has(src)} onChange={() => onToggleSource(src)} />
-                <span>{sourceLabel(src)}{PROSPECT_SOURCES.includes(src) ? " · aprox." : ""}</span>
-              </label>
-            ))}
-          </div>
+      <div className="relative ml-auto md:ml-0" ref={ref}>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          aria-expanded={open}
+          aria-haspopup="menu"
+          onClick={() => setOpen((o) => !o)}
+          data-testid="menu-button"
+        >
+          Menú
+          {reviews ? (
+            <span className="t-micro ml-2 rounded-pill bg-naranja px-1.5 text-carbon">
+              {reviews}
+            </span>
+          ) : null}
+        </button>
+        {open ? (
+          <nav
+            role="menu"
+            className="card absolute right-0 top-full z-40 mt-2 flex w-64 flex-col p-2 text-carbon shadow-pop"
+          >
+            {data?.viewer ? (
+              <p className="t-micro px-2 py-1 text-gris-700">{data.viewer}</p>
+            ) : null}
+            {latest ? (
+              <p className="t-micro px-2 pb-2 text-gris-700">
+                Último archivo: {latest.filename},{" "}
+                {new Date(latest.created_at).toLocaleDateString("es-AR")}
+              </p>
+            ) : null}
+            <Link
+              role="menuitem"
+              href="/revisar"
+              className="rounded-button px-2 py-2 hover:bg-papel"
+              data-testid="review-link"
+            >
+              Revisar{reviews ? ` (${reviews})` : ""}
+            </Link>
+            <Link
+              role="menuitem"
+              href="/importar"
+              className="rounded-button px-2 py-2 hover:bg-papel"
+              data-testid="import-link"
+            >
+              Importar
+            </Link>
+            {data?.viewer_role === "admin" ? (
+              <Link
+                role="menuitem"
+                href="/usuarios"
+                className="rounded-button px-2 py-2 hover:bg-papel"
+                data-testid="users-link"
+              >
+                Usuarios
+              </Link>
+            ) : null}
+            <form method="post" action="/api/logout">
+              <button
+                role="menuitem"
+                className="w-full rounded-button px-2 py-2 text-left hover:bg-papel"
+              >
+                Salir
+              </button>
+            </form>
+          </nav>
         ) : null}
-
-        {sources.some((src) => PROSPECT_SOURCES.includes(src) && enabledSources.has(src)) ? (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2" data-testid="attr-filters">
-            {ATTR_FILTERS.map((f) => (
-              <div key={f.key} className="flex flex-wrap items-center gap-2">
-                <span className="t-meta text-white/80">{f.label}</span>
-                {f.options.map((o) => {
-                  const on = attrSel[f.key]?.has(o.value) ?? false;
-                  return (
-                    <label key={o.value} className={`pill t-meta flex cursor-pointer items-center border px-2 py-1 ${on ? "border-white/60 bg-white/10" : "border-white/25 text-white/60"}`}>
-                      <input type="checkbox" className="sr-only" checked={on} onChange={() => onToggleAttr(f.key, o.value)} />
-                      <span>{o.label}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        <label className="flex items-center gap-2">
-          <span className="t-meta text-white/80" title="Cuántos hexágonos de alrededor se suman al total de la zona">Zona</span>
-          <select value={catchmentK} onChange={(e) => onCatchment(Number(e.target.value))} className="select-dark max-md:flex-1" data-testid="zone-select">
-            {[0, 1, 2].map((k) => <option key={k} value={k}>{zoneLabel(k)}</option>)}
-          </select>
-        </label>
       </div>
     </header>
   );

@@ -1,10 +1,9 @@
-import { cellToBoundary, cellToParent, getResolution, gridDisk } from "h3-js";
+import { cellToBoundary, cellToParent } from "h3-js";
 import type { MapSeller } from "./types";
-import type { Metric } from "./metrics";
+import { shareBin } from "./opportunity";
+import { HUB_RES } from "./ranking";
 
-export const STORED_RES = 9;
-
-/** Display resolution follows zoom: coarse for the country, 7 at metro view, 8 at city view (the default), 9 up close. */
+/** Display resolution follows zoom: coarse for the country, 7 at metro view, 8 at city view, 9 up close. */
 export function resolutionForZoom(zoom: number): number {
   if (zoom < 5.5) return 4;
   if (zoom < 7) return 5;
@@ -14,116 +13,81 @@ export function resolutionForZoom(zoom: number): number {
   return 9;
 }
 
-export type CellAgg = {
-  cell: string;
-  value: number;
-  sellers: MapSeller[];
-};
-
-/** Group sellers into cells at `res`, evaluating the metric per cell. */
-export function aggregate(sellers: MapSeller[], res: number, metric: Metric): Map<string, CellAgg> {
-  const cells = new Map<string, MapSeller[]>();
-  for (const s of sellers) {
-    if (!s.h3_r9) continue;
-    const cell = res >= STORED_RES ? s.h3_r9 : cellToParent(s.h3_r9, res);
-    const arr = cells.get(cell);
-    if (arr) arr.push(s); else cells.set(cell, [s]);
-  }
-  const out = new Map<string, CellAgg>();
-  for (const [cell, rows] of cells) out.set(cell, { cell, value: metric.reduce(rows), sellers: rows });
-  return out;
-}
-
-/** Hexágonos vecinos dentro de k anillos, sin contar el central (k=1 → 6, k=2 → 18). */
-export function neighbourCount(k: number): number {
-  return 3 * k * (k + 1);
-}
-
-/** Cómo se nombra la zona en la interfaz: "este + 6 vecinos". */
-export function zoneLabel(k: number): string {
-  return k > 0 ? `este + ${neighbourCount(k)} vecinos` : "solo este hexágono";
-}
-
-/** Sum of a metric over a cell and its k-ring neighbours: the catchment a hub there would serve. */
-export function catchment(cell: string, agg: Map<string, CellAgg>, metric: Metric, k: number): number {
-  const rows: MapSeller[] = [];
-  for (const c of gridDisk(cell, k)) {
-    const a = agg.get(c);
-    if (a) rows.push(...a.sellers);
-  }
-  return metric.reduce(rows);
-}
-
-export type Bin = { min: number; max: number; color: string; label: string };
-
-/** Approximate layer: tints of the brand's data blue, so it never reads as the street-level orange. */
-export const APPROX_PALETTE = ["#E3EEF3", "#BAD6E3", "#8CBBD0", "#5E9BB8", "#2B6E8F", "#1D4B63"];
-
-/** The approximate layer never goes finer than this: its points are area centres, not doors. */
-export const APPROX_MAX_RES = 7;
-
-// Rampa secuencial de marca: del Papel al Naranja ELOG y al Naranja Tostado. Pálido = pocos, saturado = muchos.
-const PALETTE = ["#F5E3D3", "#FFC48F", "#FF9038", "#E86A1F", "#C13E06", "#8A2B04"];
+/** Opportunity is scored per hub cell (res 8); the map never draws it finer. */
+export const displayRes = (zoom: number): number =>
+  Math.min(resolutionForZoom(zoom), HUB_RES);
 
 /**
- * Class breaks that survive skewed, small-N data. Quantile breaks on the
- * distinct values; when there are few distinct values each becomes its own bin.
- * Every bin is labelled with its count range so colour maps back to numbers.
+ * Heat surface: one polygon per cell, coloured by the share of the target a hub there reaches.
+ * Coarser than res 8, a parent shows the best spot inside it.
  */
-export function computeBins(values: number[], palette: string[] = PALETTE): Bin[] {
-  const vals = values.filter((v) => v > 0).sort((a, b) => a - b);
-  if (!vals.length) return [];
-  const distinct = [...new Set(vals)];
-  let edges: number[];
-  if (distinct.length <= palette.length) {
-    edges = distinct;
-  } else {
-    const n = palette.length;
-    edges = [];
-    for (let i = 1; i <= n; i++) {
-      const q = vals[Math.min(vals.length - 1, Math.ceil((i / n) * vals.length) - 1)];
-      if (!edges.includes(q)) edges.push(q);
-    }
+export function opportunityGeoJSON(
+  scores: Map<string, number>,
+  target: number,
+  res: number,
+): GeoJSON.FeatureCollection {
+  const byCell = new Map<string, number>();
+  for (const [cell, v] of scores) {
+    if (v <= 0) continue;
+    const c = res >= HUB_RES ? cell : cellToParent(cell, res);
+    if ((byCell.get(c) ?? 0) < v) byCell.set(c, v);
   }
-  const bins: Bin[] = [];
-  let lo = 1;
-  edges.forEach((hi, i) => {
-    const color = palette[Math.round((i / Math.max(1, edges.length - 1)) * (palette.length - 1))];
-    bins.push({ min: lo, max: hi, color, label: lo === hi ? `${lo}` : `${lo}–${hi}` });
-    lo = hi + 1;
-  });
-  return bins;
-}
-
-export function colorFor(value: number, bins: Bin[]): string {
-  for (const b of bins) if (value >= b.min && value <= b.max) return b.color;
-  return bins.length ? bins[bins.length - 1].color : "#E3DFDB";
-}
-
-/** GeoJSON for MapLibre: one polygon per populated cell with value and colour baked in. */
-export function toGeoJSON(agg: Map<string, CellAgg>, bins: Bin[]): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
-  for (const a of agg.values()) {
-    const ring = cellToBoundary(a.cell, true); // [lng, lat]
+  for (const [cell, volume] of byCell) {
+    const ring = cellToBoundary(cell, true);
     ring.push(ring[0]);
+    const share = volume / target;
     features.push({
       type: "Feature",
-      id: a.cell,
-      properties: { cell: a.cell, value: a.value, color: colorFor(a.value, bins), res: getResolution(a.cell) },
+      id: cell,
+      properties: {
+        cell,
+        volume,
+        share,
+        color: shareBin(share).color,
+        top: share >= 1,
+      },
       geometry: { type: "Polygon", coordinates: [ring] },
     });
   }
   return { type: "FeatureCollection", features };
 }
 
+/** A circle of `km` around a point, for the hovered or selected hub radius. */
+export function circlePolygon(
+  lat: number,
+  lng: number,
+  km: number,
+  steps = 64,
+): GeoJSON.Feature<GeoJSON.Polygon> {
+  const dLat = km / 110.574;
+  const dLng = km / (111.32 * Math.cos((lat * Math.PI) / 180));
+  const ring: [number, number][] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = (i / steps) * 2 * Math.PI;
+    ring.push([lng + dLng * Math.cos(t), lat + dLat * Math.sin(t)]);
+  }
+  ring[steps] = ring[0];
+  return {
+    type: "Feature",
+    properties: {},
+    geometry: { type: "Polygon", coordinates: [ring] },
+  };
+}
+
 export function pointsGeoJSON(sellers: MapSeller[]): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
-    features: sellers.filter((s) => s.lat != null && s.lng != null).map((s) => ({
-      type: "Feature",
-      id: s.id,
-      properties: { id: s.id, name: s.name, kind: s.kind, cell: s.h3_r9 },
-      geometry: { type: "Point", coordinates: [s.lng as number, s.lat as number] },
-    })),
+    features: sellers
+      .filter((s) => s.lat != null && s.lng != null)
+      .map((s) => ({
+        type: "Feature",
+        id: s.id,
+        properties: { id: s.id, name: s.name, kind: s.kind },
+        geometry: {
+          type: "Point",
+          coordinates: [s.lng as number, s.lat as number],
+        },
+      })),
   };
 }

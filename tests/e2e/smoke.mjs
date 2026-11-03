@@ -31,7 +31,7 @@ await page.waitForURL(/\/login\?error=1/);
 await page.fill("#username", username);
 await page.fill("#password", password);
 await page.click("button[type=submit]");
-await page.waitForURL(base + "/");
+await page.waitForURL((u) => u.pathname === "/");
 await page.waitForSelector('[data-testid="map"][data-ready="1"]', { timeout: 30000 });
 await page.waitForFunction(() => Number(document.querySelector('[data-testid="map"]')?.getAttribute("data-hexes")) > 0, null, { timeout: 30000 });
 await page.waitForSelector('[data-testid="stats"]');
@@ -39,53 +39,62 @@ await page.waitForTimeout(1500); // let tiles/fallback settle
 const hexCount = await page.getAttribute('[data-testid="map"]', "data-hexes");
 const stats = await page.textContent('[data-testid="stats"]');
 console.log("hexes:", hexCount, "| stats:", stats);
+const legend = await page.textContent('[data-testid="legend"]');
+if (!legend?.includes("% del objetivo")) throw new Error("legend is not on the opportunity scale: " + legend);
 await page.screenshot({ path: `${out}/01-metro.png` });
 
-// 4. Click the densest hex: pick its centre through the MapLibre canvas by simulating a click on the hex with the highest value
-const clicked = await page.evaluate(() => {
-  const map = document.querySelector('[data-testid="map"]');
-  return !!map;
-});
-if (!clicked) throw new Error("map missing");
-// click roughly at map centre first; then probe outward until the panel shows a cell
-const box = await page.locator('[data-testid="map"] canvas').first().boundingBox();
-let hit = false;
-const probes = [];
-for (let dy = -300; dy <= 300; dy += 40) for (let dx = -400; dx <= 400; dx += 40) probes.push([dx, dy]);
-probes.sort((a, b) => (a[0] ** 2 + a[1] ** 2) - (b[0] ** 2 + b[1] ** 2));
-for (const [dx, dy] of probes) {
-  await page.mouse.click(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy);
-  if (await page.locator('[data-testid="panel-cell"]').count()) { hit = true; break; }
-}
-if (!hit) throw new Error("no hex could be selected");
-await page.waitForTimeout(300);
-const doors = await page.locator('[data-testid="door-list"] > li').count();
-console.log("selected cell with doors:", doors);
-await page.screenshot({ path: `${out}/02-selected.png` });
+// 4. The panel starts collapsed; opening it shows the ranked list, one map pin per row, and a row opens a cluster
+if (await page.locator('[data-testid="opportunity-list"]').count()) throw new Error("panel should start collapsed");
+await page.click('[data-testid="panel-toggle"]');
+await page.waitForSelector('[data-testid="opportunity-row"]', { timeout: 30000 });
+const rows = await page.locator('[data-testid="opportunity-row"]').count();
+if (!rows) throw new Error("no opportunities ranked");
+const pins = await page.locator('[data-testid="map-pin"]').count();
+if (pins !== rows) throw new Error(`map shows ${pins} pins for ${rows} ranked spots`);
+console.log("opportunities:", rows, "| first:", (await page.locator('[data-testid="opportunity-row"]').first().textContent())?.replace(/\s+/g, " "));
+await page.locator('[data-testid="opportunity-row"]').first().click();
+await page.waitForSelector('[data-testid="panel-cell"]');
+await page.waitForSelector('[data-testid="needed"]');
+await page.waitForTimeout(500);
+console.log("footnote:", await page.textContent('[data-testid="cluster-footnote"]'));
+await page.screenshot({ path: `${out}/cluster.png` });
 
-// 5. Open a seller
+// 5. A seller opens, and back returns to the cluster
 await page.locator('[data-testid="door-list"] button').first().click();
 await page.waitForSelector('[data-testid="panel-seller"]');
 await page.screenshot({ path: `${out}/03-seller.png` });
+await page.getByText("← Volver al cluster").click();
 
-// 6. Toggle agencies on and switch metric — data-driven state must re-render without errors
-await page.locator('[data-testid="kind-filters"] label').nth(1).click();
-await page.selectOption('[data-testid="metric-select"]', "location_count");
-await page.waitForTimeout(500);
-const hexes2 = await page.getAttribute('[data-testid="map"]', "data-hexes");
-console.log("hexes after metric switch:", hexes2);
+// 6. Changing the radius re-ranks and lands in the URL
+await page.getByText("← Oportunidades").click();
+await page.click('[data-testid="radius-8"]');
+await page.waitForFunction(() => location.search.includes("r=8"));
+await page.reload();
+await page.waitForSelector('[data-testid="radius-8"][aria-pressed="true"]');
+await page.waitForSelector('[data-testid="map-pin"]', { timeout: 30000 });
 
-// 7. Zoom to the Morón / Castelar cluster: res 8 at city zoom, then res 9 with individual doors
-await page.evaluate(() => window.__elogMap.jumpTo({ center: [-58.62, -34.65], zoom: 12 }));
-await page.waitForTimeout(1200);
-await page.screenshot({ path: `${out}/04-city.png` });
+// A pin opens its spot and expands the collapsed panel
+await page.locator('[data-testid="map-pin"]').first().click();
+await page.waitForSelector('[data-testid="panel-cell"]');
+await page.getByText("← Oportunidades").click();
+await page.waitForSelector('[data-testid="opportunity-row"]', { timeout: 30000 });
+
+// 7. Filters: clearing them adds sellers to the header count
+const before = await page.textContent('[data-testid="stats"]');
+await page.click('[data-testid="filters-button"]');
+await page.waitForSelector('[data-testid="filters-popover"]');
+await page.screenshot({ path: `${out}/04-filters.png` });
+await page.getByText("Limpiar").click();
+await page.waitForFunction((b) => document.querySelector('[data-testid="stats"]')?.textContent !== b, before);
+console.log("stats after Limpiar:", await page.textContent('[data-testid="stats"]'));
+
+// 8. Street zoom shows door-level dots under the heat
 await page.evaluate(() => window.__elogMap.jumpTo({ center: [-58.62, -34.65], zoom: 14 }));
 await page.waitForTimeout(1200);
-const resLabel = await page.textContent('[data-testid="legend"]');
-console.log("legend at z14 (res " + await page.getAttribute('[data-testid="legend"]', "data-res") + "):", resLabel?.replace(/\s+/g, " ").slice(0, 60));
 await page.screenshot({ path: `${out}/05-doors.png` });
 
-// 8. Sign out returns to login
+// 9. Sign out (in the menu) returns to login
+await page.click('[data-testid="menu-button"]');
 await page.click("text=Salir");
 await page.waitForURL(/\/login/);
 

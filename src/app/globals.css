@@ -21,6 +21,12 @@
   --color-ambar: #B57C12;
   --color-rojo: #B23A2C;
   --color-azul: #2B6E8F;
+  /* Oportunidad: % del objetivo alcanzable (cortes fijos). Mismos valores que SHARE_BINS en src/lib/opportunity.ts */
+  --color-opp-1: #FAF0E6;
+  --color-opp-2: #FFC48F;
+  --color-opp-3: #FF9038;
+  --color-opp-4: #C13E06;
+  --color-opp-5: #6E2303;
 
   --font-sans: "Montserrat", Arial, Helvetica, sans-serif;
   --font-display: "Montserrat Alternates", "Montserrat", Arial, Helvetica, sans-serif;
@@ -51,6 +57,7 @@
   --panel-min: 300px;
   --panel-max: 440px;
   --panel-sheet-max: 78dvh; /* alto máx. del panel como hoja inferior en móvil */
+  --panel-sheet-peek: 34dvh; /* hoja inferior sin selección: asoma el top 3 de oportunidades */
   --queue-w: 380px;         /* lista de la cola de revisión en escritorio */
   --review-card-w: 460px;   /* tarjeta de revisión acoplada a la derecha del mapa en escritorio */
   --gutter: 1rem;           /* margen lateral de página en móvil (= space-2) */
@@ -104,6 +111,16 @@ body {
 .select-dark:focus { outline: none; border-color: #fff; }
 .pill { border-radius: var(--radius-pill); }
 .card { background: #fff; border: 1px solid var(--color-gris-200); border-radius: var(--radius-card); }
+/* Dock del mapa: objetivo, radio y filtros flotando sobre el mapa */
+.dock { background: #fff; border: 1px solid var(--color-gris-200); border-radius: var(--radius-button); box-shadow: var(--shadow-card); padding: 4px; display: flex; gap: 4px; align-items: center; }
+.seg { display: flex; border: 1px solid var(--color-gris-200); border-radius: var(--radius-field); overflow: hidden; }
+.seg button { padding: 5px 10px; min-height: 32px; color: var(--color-grafito); }
+.seg button[aria-pressed="true"] { background: var(--color-grafito); color: #fff; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-pill); border: 1px solid var(--color-gris-200); background: #fff; padding: 2px 10px; font-size: 12px; }
+/* Pin numerado de oportunidad (mapa y lista) */
+.pin { width: 28px; height: 28px; border-radius: var(--radius-pill); background: #fff; border: 2px solid var(--color-carbon); color: var(--color-carbon); font-weight: 600; font-size: 13px; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-ctrl); cursor: pointer; }
+.pin[data-active="true"] { background: var(--color-carbon); color: #fff; }
+:focus-visible { outline: 2px solid var(--color-grafito); outline-offset: 2px; }
 
 /* Motivo Ruta: una sola línea naranja, esquinas grandes, entra y sale por los bordes */
 .ruta { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }

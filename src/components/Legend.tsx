@@ -1,26 +1,27 @@
-import type { Bin } from "@/lib/hexes";
+import { SHARE_BINS } from "@/lib/opportunity";
 
-/**
- * Compact legend: one line per colour, the unit inline ("1 seller", "4–9 sellers"),
- * no title, so it takes as little of the map as possible. The H3 resolution stays
- * available as a tooltip and data attribute.
- */
-export function Legend({ bins, one, many, res, title, testId = "legend" }: { bins: Bin[]; one: string; many: string; res: number; title?: string; testId?: string }) {
+/** One legend on the opportunity scale. Fixed breaks, so a colour always means the same share. */
+export function Legend({ radiusKm }: { radiusKm: number }) {
   return (
-    <div className="card t-meta pointer-events-auto py-2 pl-2 pr-4 shadow-card" data-testid={testId} data-res={res} title={`Cantidad por hexágono (H3 res ${res})`}>
-      {title ? <p className="t-etiqueta mb-1 text-gris-700">{title}</p> : null}
-      {bins.length === 0 ? (
-        <p className="text-gris-700">Sin datos en la vista.</p>
-      ) : (
-        <ul className="space-y-1">
-          {bins.map((b) => (
-            <li key={b.label} className="flex items-center gap-2">
-              <span className="inline-block h-3 w-4 shrink-0 rounded-field border border-carbon/10" style={{ background: b.color }} />
-              <span className="tnum whitespace-nowrap text-carbon">{b.label} {b.max === 1 ? one : many}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+    <div
+      className="card t-micro pointer-events-auto px-3 py-2 shadow-card"
+      data-testid="legend"
+    >
+      <p className="mb-1 text-gris-700">% del objetivo a {radiusKm} km</p>
+      <div className="flex gap-0.5">
+        {SHARE_BINS.map((b) => (
+          <span
+            key={b.label}
+            className="block h-2.5 w-7 rounded-field"
+            style={{ background: b.color }}
+            title={b.label}
+          />
+        ))}
+      </div>
+      <div className="mt-0.5 flex justify-between text-gris-700">
+        <span>&lt;25%</span>
+        <span>100%+</span>
+      </div>
     </div>
   );
 }

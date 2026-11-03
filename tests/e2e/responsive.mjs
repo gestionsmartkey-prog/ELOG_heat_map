@@ -1,6 +1,6 @@
 /**
  * Responsive checks: no horizontal overflow at mobile/tablet/desktop, map renders,
- * and the detail panel becomes a bottom sheet on mobile. Screenshots to data/out/shots.
+ * and the panel is a bottom sheet on mobile that peeks the ranked list. Screenshots to data/out/shots.
  *   APP_USER=demo APP_PASSWORD=demo-password PW_CHROMIUM=/opt/pw-browsers/chromium node tests/e2e/responsive.mjs
  */
 import { chromium } from "playwright";
@@ -28,8 +28,9 @@ await page.goto(base + "/login");
 await page.fill("#username", username);
 await page.fill("#password", password);
 await page.click("button[type=submit]");
-await page.waitForURL(base + "/");
+await page.waitForURL((u) => u.pathname === "/");
 await page.waitForSelector('[data-testid="map"][data-ready="1"]', { timeout: 30000 });
+await page.waitForSelector('[data-testid="map-pin"]', { timeout: 30000 });
 
 const overflow = async () => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 
@@ -42,27 +43,34 @@ for (const { name, w, h } of widths) {
   await page.screenshot({ path: `${out}/resp-${name}.png` });
 }
 
-// Mobile bottom sheet: select a hex, panel should appear pinned to the bottom.
+// Mobile bottom sheet: collapsed it is a bar at the bottom; opened it peeks the ranked list; a row opens the cluster in the sheet.
 await page.setViewportSize({ width: 390, height: 844 });
 await page.waitForTimeout(500);
-const box = await page.locator('[data-testid="map"] canvas').first().boundingBox();
-let hit = false;
-const probes = [];
-for (let dy = -220; dy <= 220; dy += 40) for (let dx = -140; dx <= 140; dx += 40) probes.push([dx, dy]);
-probes.sort((a, b) => (a[0] ** 2 + a[1] ** 2) - (b[0] ** 2 + b[1] ** 2));
-for (const [dx, dy] of probes) {
-  await page.mouse.click(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy);
-  if (await page.locator('[data-testid="panel-cell"]').count()) { hit = true; break; }
-}
-if (hit) {
-  const panel = await page.locator('[data-testid="panel-cell"]').boundingBox();
-  const vh = 844;
-  console.log(`mobile sheet: bottom=${Math.round(panel.y + panel.height)} viewport=${vh}`);
-  if (panel.y + panel.height < vh - 2) throw new Error("panel not anchored to bottom on mobile");
-  await page.screenshot({ path: `${out}/resp-mobile-sheet.png` });
-} else {
-  console.log("mobile sheet: no hex hit (skipped sheet assertion)");
-}
+const vh = 844;
+const bar = await page.locator('[data-testid="panel-toggle"]').boundingBox();
+console.log(`mobile collapsed bar: top=${Math.round(bar.y)} height=${Math.round(bar.height)}`);
+if (bar.y + bar.height < vh - 2 || bar.height < 40) throw new Error("collapsed panel bar not at the bottom or under 40px");
+await page.screenshot({ path: `${out}/resp-mobile-collapsed.png` });
+await page.click('[data-testid="panel-toggle"]');
+await page.waitForSelector('[data-testid="opportunity-row"]');
+const list = await page.locator('[data-testid="opportunity-list"]').boundingBox();
+console.log(`mobile peek: top=${Math.round(list.y)} bottom=${Math.round(list.y + list.height)} viewport=${vh}`);
+if (list.y + list.height < vh - 2) throw new Error("ranked list not anchored to bottom on mobile");
+if (list.y < vh / 2) throw new Error("peeking list covers more than half the map on mobile");
+await page.locator('[data-testid="opportunity-row"]').first().click();
+await page.waitForSelector('[data-testid="panel-cell"]');
+await page.waitForTimeout(300);
+const panel = await page.locator('[data-testid="panel-cell"]').boundingBox();
+console.log(`mobile sheet: bottom=${Math.round(panel.y + panel.height)} viewport=${vh}`);
+if (panel.y + panel.height < vh - 2) throw new Error("panel not anchored to bottom on mobile");
+const ov = await overflow();
+if (ov > 1) throw new Error(`mobile sheet: horizontal overflow ${ov}px`);
+await page.screenshot({ path: `${out}/resp-mobile-sheet.png` });
+
+// Mobile dock folds behind "Ajustes".
+await page.click('[data-testid="settings-button"]');
+await page.waitForSelector('[data-testid="radius-5"]', { state: "visible" });
+await page.screenshot({ path: `${out}/resp-mobile-ajustes.png` });
 
 const real = errors.filter((e) => !/basemaps\.cartocdn|Failed to fetch|net::ERR|AJAXError|style/i.test(e));
 if (real.length) { console.error("browser errors:", real); process.exit(1); }

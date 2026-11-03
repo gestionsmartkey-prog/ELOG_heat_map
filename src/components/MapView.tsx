@@ -2,19 +2,34 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "maplibre-gl";
-import type { LngLatBoundsLike, Map as MLMap, MapMouseEvent } from "maplibre-gl";
+import type {
+  LngLatBoundsLike,
+  Map as MLMap,
+  MapMouseEvent,
+} from "maplibre-gl";
 import { cellToLatLng } from "h3-js";
 import type { MapSeller } from "@/lib/types";
-import type { Metric } from "@/lib/metrics";
-import { APPROX_MAX_RES, APPROX_PALETTE, aggregate, catchment, computeBins, pointsGeoJSON, resolutionForZoom, toGeoJSON, zoneLabel, type Bin, type CellAgg } from "@/lib/hexes";
+import type { Pick } from "@/lib/ranking";
+import { HUB_RES } from "@/lib/ranking";
+import { formatPkgs, formatShare } from "@/lib/opportunity";
+import {
+  circlePolygon,
+  displayRes,
+  opportunityGeoJSON,
+  pointsGeoJSON,
+} from "@/lib/hexes";
 import { Legend } from "./Legend";
 
-const BASEMAP = process.env.NEXT_PUBLIC_BASEMAP_STYLE ?? "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
+const BASEMAP =
+  process.env.NEXT_PUBLIC_BASEMAP_STYLE ??
+  "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json";
 /** Used when the basemap cannot be fetched (offline, blocked network): hexes still render. */
 const BLANK_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {},
-  layers: [{ id: "bg", type: "background", paint: { "background-color": "#E3DFDB" } }],
+  layers: [
+    { id: "bg", type: "background", paint: { "background-color": "#E3DFDB" } },
+  ],
 };
 /** Fetch the basemap style ourselves so an unreachable CDN degrades to a blank canvas instead of a half-loaded map. */
 async function resolveStyle(): Promise<maplibregl.StyleSpecification | string> {
@@ -30,46 +45,88 @@ async function resolveStyle(): Promise<maplibregl.StyleSpecification | string> {
   }
 }
 
-const AMBA_BOUNDS: LngLatBoundsLike = [[-59.3, -35.1], [-57.9, -34.25]];
+const AMBA_BOUNDS: LngLatBoundsLike = [
+  [-59.3, -35.1],
+  [-57.9, -34.25],
+];
 /** The prospect files cover the whole country, so the map is no longer fenced to the metro area. */
-const ARGENTINA_BOUNDS: LngLatBoundsLike = [[-74, -56], [-52, -20]];
+const ARGENTINA_BOUNDS: LngLatBoundsLike = [
+  [-74, -56],
+  [-52, -20],
+];
 const HOME_CENTER: [number, number] = [-58.55, -34.62];
+const HOME_ZOOM = 10;
 
-type Props = {
-  sellers: MapSeller[];
-  /** Sellers located only by the centre of an area: their own layer, never mixed into the door-level hexes. */
-  approxSellers: MapSeller[];
-  metric: Metric;
-  catchmentK: number;
-  selectedCell: string | null;
-  onSelect: (cell: CellAgg | null, catchmentValue: number | null) => void;
-  onResolution: (res: number) => void;
+const EMPTY: GeoJSON.FeatureCollection = {
+  type: "FeatureCollection",
+  features: [],
 };
 
-export function MapView({ sellers, approxSellers, metric, catchmentK, selectedCell, onSelect, onResolution }: Props) {
+type Focus = { lat: number; lng: number; cell?: string; solid: boolean };
+
+type Props = {
+  scores: Map<string, number> | null;
+  target: number;
+  radiusKm: number;
+  /** Every ranked spot, shown as a numbered pin. */
+  pins: Pick[];
+  /** Door-level prospects, dots at street zoom. */
+  exact: MapSeller[];
+  /** Agencies and partners when the switch is on. */
+  references: MapSeller[];
+  /** The hovered (dashed) or selected (solid) hub radius. */
+  focus: Focus | null;
+  activeRank: number | null;
+  initialView?: { center?: [number, number]; zoom?: number };
+  onHexClick: (cell8: string) => void;
+  onPinHover: (rank: number | null) => void;
+  onPinClick: (rank: number) => void;
+  onMove: (center: [number, number], zoom: number) => void;
+};
+
+/** Opportunity heat map: hexes coloured by the share of the target reachable from them (design doc §2). */
+export function MapView({
+  scores,
+  target,
+  radiusKm,
+  pins,
+  exact,
+  references,
+  focus,
+  activeRank,
+  initialView,
+  onHexClick,
+  onPinHover,
+  onPinClick,
+  onMove,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const [ready, setReady] = useState(false);
-  const [zoom, setZoom] = useState(10);
-  const res = resolutionForZoom(zoom);
+  const [zoom, setZoom] = useState(initialView?.zoom ?? HOME_ZOOM);
+  const res = displayRes(zoom);
   const hoverRef = useRef<string | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
 
-  const agg = useMemo(() => aggregate(sellers, res, metric), [sellers, res, metric]);
-  const bins: Bin[] = useMemo(() => computeBins([...agg.values()].map((a) => a.value)), [agg]);
-  const hexes = useMemo(() => toGeoJSON(agg, bins), [agg, bins]);
-  const points = useMemo(() => pointsGeoJSON(sellers), [sellers]);
-  const approxAgg = useMemo(() => aggregate(approxSellers, Math.min(res, APPROX_MAX_RES), metric), [approxSellers, res, metric]);
-  const approxBins: Bin[] = useMemo(() => computeBins([...approxAgg.values()].map((a) => a.value), APPROX_PALETTE), [approxAgg]);
-  const approxHexes = useMemo(() => toGeoJSON(approxAgg, approxBins), [approxAgg, approxBins]);
-  const labels = useMemo(() => localityLabels(sellers), [sellers]);
-  const markersRef = useRef<maplibregl.Marker[]>([]);
+  const hexes = useMemo(
+    () => opportunityGeoJSON(scores ?? new Map(), target, res),
+    [scores, target, res],
+  );
+  const points = useMemo(() => pointsGeoJSON(exact), [exact]);
+  const refs = useMemo(() => pointsGeoJSON(references), [references]);
+  const focusData = useMemo<GeoJSON.FeatureCollection>(() => {
+    if (!focus) return EMPTY;
+    const f = circlePolygon(focus.lat, focus.lng, radiusKm);
+    f.properties = { solid: focus.solid };
+    return { type: "FeatureCollection", features: [f] };
+  }, [focus, radiusKm]);
 
   // Keep latest values reachable from map event handlers without re-binding them.
-  const latest = useRef({ agg, approxAgg, metric, catchmentK, onSelect });
-  useEffect(() => { latest.current = { agg, approxAgg, metric, catchmentK, onSelect }; }, [agg, approxAgg, metric, catchmentK, onSelect]);
-
-  useEffect(() => { onResolution(res); }, [res, onResolution]);
+  const latest = useRef({ radiusKm, onHexClick, onMove });
+  useEffect(() => {
+    latest.current = { radiusKm, onHexClick, onMove };
+  }, [radiusKm, onHexClick, onMove]);
+  const initial = useRef(initialView);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -78,14 +135,16 @@ export function MapView({ sellers, approxSellers, metric, catchmentK, selectedCe
     const container = containerRef.current;
 
     // Bundlers do not give MapLibre an import.meta.url it can derive its worker from.
-    maplibregl.setWorkerUrl(`${window.location.origin}/maplibre/maplibre-gl-worker.mjs`);
+    maplibregl.setWorkerUrl(
+      `${window.location.origin}/maplibre/maplibre-gl-worker.mjs`,
+    );
     resolveStyle().then((style) => {
       if (disposed) return;
       map = new maplibregl.Map({
         container,
         style,
-        center: HOME_CENTER,
-        zoom: 10,
+        center: initial.current?.center ?? HOME_CENTER,
+        zoom: initial.current?.zoom ?? HOME_ZOOM,
         minZoom: 3.5,
         maxZoom: 17,
         maxBounds: ARGENTINA_BOUNDS,
@@ -93,175 +152,305 @@ export function MapView({ sellers, approxSellers, metric, catchmentK, selectedCe
       });
       mapRef.current = map;
       (window as unknown as { __elogMap?: MLMap }).__elogMap = map; // debugging hook for browser tests
-      map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
+      // The dock sits top-left, so the zoom buttons go bottom-right.
+      map.addControl(
+        new maplibregl.NavigationControl({ showCompass: false }),
+        "bottom-right",
+      );
 
       const m = map;
       m.on("load", () => {
-        m.addSource("hexes", { type: "geojson", data: { type: "FeatureCollection", features: [] }, promoteId: "cell" });
-        m.addSource("points", { type: "geojson", data: { type: "FeatureCollection", features: [] }, promoteId: "id" });
-        m.addSource("hexes-approx", { type: "geojson", data: { type: "FeatureCollection", features: [] }, promoteId: "cell" });
-        // Approximate layer sits under the door-level hexes: blue, dashed outline.
-        m.addLayer({ id: "approx-fill", type: "fill", source: "hexes-approx", paint: { "fill-color": ["get", "color"], "fill-opacity": 0.6 } });
-        m.addLayer({ id: "approx-line", type: "line", source: "hexes-approx", paint: { "line-color": "#1D4B63", "line-width": 1, "line-dasharray": [2, 2] } });
+        m.addSource("hexes", {
+          type: "geojson",
+          data: EMPTY,
+          promoteId: "cell",
+        });
+        m.addSource("focus", { type: "geojson", data: EMPTY });
+        m.addSource("points", {
+          type: "geojson",
+          data: EMPTY,
+          promoteId: "id",
+        });
+        m.addSource("refs", { type: "geojson", data: EMPTY, promoteId: "id" });
+        const selected = [
+          "boolean",
+          ["feature-state", "selected"],
+          false,
+        ] as maplibregl.ExpressionSpecification;
         m.addLayer({
-          id: "hex-fill", type: "fill", source: "hexes",
+          id: "hex-fill",
+          type: "fill",
+          source: "hexes",
           paint: {
             "fill-color": ["get", "color"],
-            "fill-opacity": ["case", ["boolean", ["feature-state", "hover"], false], 0.9, 0.7],
+            "fill-opacity": [
+              "case",
+              ["boolean", ["feature-state", "hover"], false],
+              0.9,
+              0.75,
+            ],
           },
         });
         m.addLayer({
-          id: "hex-line", type: "line", source: "hexes",
+          id: "hex-line",
+          type: "line",
+          source: "hexes",
           paint: {
-            "line-color": ["case", ["boolean", ["feature-state", "selected"], false], "#2A2726", "#FFFFFF"],
-            "line-width": ["case", ["boolean", ["feature-state", "selected"], false], 2.5, 0.8],
+            "line-color": [
+              "case",
+              selected,
+              "#2A2726",
+              ["get", "top"],
+              "#2A2726",
+              "#FFFFFF",
+            ],
+            "line-width": ["case", selected, 2.5, ["get", "top"], 1.5, 0.6],
           },
         });
         m.addLayer({
-          id: "points", type: "circle", source: "points", minzoom: 13.5,
+          id: "focus-fill",
+          type: "fill",
+          source: "focus",
+          filter: ["==", ["get", "solid"], true],
+          paint: { "fill-color": "#2A2726", "fill-opacity": 0.04 },
+        });
+        m.addLayer({
+          id: "focus-dash",
+          type: "line",
+          source: "focus",
+          filter: ["==", ["get", "solid"], false],
+          paint: {
+            "line-color": "#2A2726",
+            "line-width": 1.5,
+            "line-dasharray": [2, 2],
+          },
+        });
+        m.addLayer({
+          id: "focus-line",
+          type: "line",
+          source: "focus",
+          filter: ["==", ["get", "solid"], true],
+          paint: { "line-color": "#2A2726", "line-width": 2 },
+        });
+        m.addLayer({
+          id: "points",
+          type: "circle",
+          source: "points",
+          minzoom: 13.5,
           paint: {
             "circle-radius": 5,
-            "circle-color": ["match", ["get", "kind"], "dropoff_agency", "#2B6E8F", "partner", "#2E7D5B", "unknown", "#A3A09E", "#FF9038"],
+            "circle-color": "#FF9038",
             "circle-stroke-color": "#3F3E3E",
             "circle-stroke-width": 1.5,
+          },
+        });
+        m.addLayer({
+          id: "refs",
+          type: "circle",
+          source: "refs",
+          minzoom: 11,
+          paint: {
+            "circle-radius": 4,
+            "circle-color": [
+              "match",
+              ["get", "kind"],
+              "dropoff_agency",
+              "#2B6E8F",
+              "partner",
+              "#2E7D5B",
+              "#A3A09E",
+            ],
+            "circle-stroke-color": "#FFFFFF",
+            "circle-stroke-width": 1,
           },
         });
         setReady(true);
       });
       m.on("zoomend", () => setZoom(m.getZoom()));
+      m.on("moveend", () => {
+        const c = m.getCenter();
+        latest.current.onMove([c.lng, c.lat], m.getZoom());
+      });
 
-      m.on("mousemove", "hex-fill", (e: MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-        const f = e.features?.[0];
-        const cell = f?.properties?.cell as string | undefined;
-        if (!cell) return;
-        m.getCanvas().style.cursor = "pointer";
-        if (hoverRef.current && hoverRef.current !== cell) m.setFeatureState({ source: "hexes", id: hoverRef.current }, { hover: false });
-        hoverRef.current = cell;
-        m.setFeatureState({ source: "hexes", id: cell }, { hover: true });
-        const { agg: a, metric: met, catchmentK: k } = latest.current;
-        const cellAgg = a.get(cell);
-        if (!cellAgg) return;
-        const ring = k > 0 ? catchment(cell, a, met, k) : null;
-        const html = `<strong>${met.format(cellAgg.value)}</strong> ${met.short} en este hexágono`
-          + (ring != null ? `<br/><strong>${met.format(ring)}</strong> en la zona <span style="color:#606060">(${zoneLabel(k)})</span>` : "");
-        if (!popupRef.current) popupRef.current = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
-        popupRef.current.setLngLat(e.lngLat).setHTML(html).addTo(m);
-      });
-      m.on("mousemove", "approx-fill", (e: MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
-        // A door-level hex on top wins: its own handler already wrote the popup.
-        if (m.queryRenderedFeatures(e.point, { layers: ["hex-fill"] }).length) return;
-        const cell = e.features?.[0]?.properties?.cell as string | undefined;
-        const cellAgg = cell ? latest.current.approxAgg.get(cell) : undefined;
-        if (!cellAgg) return;
-        m.getCanvas().style.cursor = "default";
-        const met = latest.current.metric;
-        const html = `<strong>${met.format(cellAgg.value)}</strong> ${met.short} · ubicación aproximada<br/><span style="color:#606060">Centro de la localidad, no el domicilio</span>`;
-        if (!popupRef.current) popupRef.current = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 8 });
-        popupRef.current.setLngLat(e.lngLat).setHTML(html).addTo(m);
-      });
-      m.on("mouseleave", "approx-fill", () => { m.getCanvas().style.cursor = ""; popupRef.current?.remove(); });
+      m.on(
+        "mousemove",
+        "hex-fill",
+        (e: MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+          const p = e.features?.[0]?.properties;
+          const cell = p?.cell as string | undefined;
+          if (!cell) return;
+          m.getCanvas().style.cursor = "pointer";
+          if (hoverRef.current && hoverRef.current !== cell)
+            m.setFeatureState(
+              { source: "hexes", id: hoverRef.current },
+              { hover: false },
+            );
+          hoverRef.current = cell;
+          m.setFeatureState({ source: "hexes", id: cell }, { hover: true });
+          const html = `<strong>${formatShare(Number(p?.share))}</strong> del objetivo<br/>${formatPkgs(Number(p?.volume))} paq/mes a ${latest.current.radiusKm} km`;
+          if (!popupRef.current)
+            popupRef.current = new maplibregl.Popup({
+              closeButton: false,
+              closeOnClick: false,
+              offset: 8,
+            });
+          popupRef.current.setLngLat(e.lngLat).setHTML(html).addTo(m);
+        },
+      );
       m.on("mouseleave", "hex-fill", () => {
         m.getCanvas().style.cursor = "";
-        if (hoverRef.current) m.setFeatureState({ source: "hexes", id: hoverRef.current }, { hover: false });
+        if (hoverRef.current)
+          m.setFeatureState(
+            { source: "hexes", id: hoverRef.current },
+            { hover: false },
+          );
         hoverRef.current = null;
         popupRef.current?.remove();
       });
-      m.on("click", (e: MapMouseEvent) => {
-        const hits = m.getLayer("hex-fill") ? m.queryRenderedFeatures(e.point, { layers: ["hex-fill"] }) : [];
-        const cell = hits[0]?.properties?.cell as string | undefined;
-        const { agg: a, metric: met, catchmentK: k, onSelect: sel } = latest.current;
-        if (!cell) { sel(null, null); return; }
-        const cellAgg = a.get(cell) ?? null;
-        sel(cellAgg, cellAgg && k > 0 ? catchment(cell, a, met, k) : null);
-      });
+      m.on(
+        "click",
+        "hex-fill",
+        (e: MapMouseEvent & { features?: maplibregl.MapGeoJSONFeature[] }) => {
+          const cell = e.features?.[0]?.properties?.cell as string | undefined;
+          if (!cell) return;
+          // Coarse hexes are not hub spots: zoom in until the hub grid shows.
+          if (displayRes(m.getZoom()) < HUB_RES) {
+            const [lat, lng] = cellToLatLng(cell);
+            m.flyTo({ center: [lng, lat], zoom: 12 });
+            return;
+          }
+          latest.current.onHexClick(cell);
+        },
+      );
     });
 
-    return () => { disposed = true; map?.remove(); mapRef.current = null; };
+    return () => {
+      disposed = true;
+      map?.remove();
+      mapRef.current = null;
+    };
   }, []);
 
-  // Push data whenever aggregation changes.
+  // Push data whenever it changes.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    (map.getSource("hexes") as maplibregl.GeoJSONSource | undefined)?.setData(hexes);
-    (map.getSource("points") as maplibregl.GeoJSONSource | undefined)?.setData(points);
-    (map.getSource("hexes-approx") as maplibregl.GeoJSONSource | undefined)?.setData(approxHexes);
-  }, [hexes, points, approxHexes, ready]);
+    (map.getSource("hexes") as maplibregl.GeoJSONSource | undefined)?.setData(
+      hexes,
+    );
+    (map.getSource("points") as maplibregl.GeoJSONSource | undefined)?.setData(
+      points,
+    );
+    (map.getSource("refs") as maplibregl.GeoJSONSource | undefined)?.setData(
+      refs,
+    );
+    (map.getSource("focus") as maplibregl.GeoJSONSource | undefined)?.setData(
+      focusData,
+    );
+  }, [hexes, points, refs, focusData, ready]);
 
-  // Locality labels: plain DOM markers (render without basemap fonts), with a
-  // greedy screen-space collision pass so dense clusters do not pile up.
+  // Numbered pins for the top picks: DOM markers, so they render without basemap fonts.
+  const pinHandlers = useRef({ onPinHover, onPinClick });
+  useEffect(() => {
+    pinHandlers.current = { onPinHover, onPinClick };
+  }, [onPinHover, onPinClick]);
+  const markersRef = useRef<
+    { rank: number; el: HTMLButtonElement; marker: maplibregl.Marker }[]
+  >([]);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    const place = () => {
-      for (const mk of markersRef.current) mk.remove();
+    for (const mk of markersRef.current) mk.marker.remove();
+    markersRef.current = pins.map((p) => {
+      const el = document.createElement("button");
+      el.type = "button";
+      el.className = "pin";
+      el.textContent = String(p.rank);
+      el.setAttribute("aria-label", `Oportunidad ${p.rank}: ${p.name}`);
+      el.dataset.testid = "map-pin";
+      el.addEventListener("mouseenter", () =>
+        pinHandlers.current.onPinHover(p.rank),
+      );
+      el.addEventListener("mouseleave", () =>
+        pinHandlers.current.onPinHover(null),
+      );
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        pinHandlers.current.onPinClick(p.rank);
+      });
+      return {
+        rank: p.rank,
+        el,
+        marker: new maplibregl.Marker({ element: el })
+          .setLngLat([p.lng, p.lat])
+          .addTo(map),
+      };
+    });
+    return () => {
+      for (const mk of markersRef.current) mk.marker.remove();
       markersRef.current = [];
-      if (res > 8) return;
-      const placed: { x: number; y: number; w: number; h: number }[] = [];
-      for (const l of labels) {
-        const p = map.project([l.lng, l.lat]);
-        const text = `${l.name} · ${l.count}`;
-        const w = text.length * 6.4 + 14, h = 22;
-        const box = { x: p.x - w / 2, y: p.y - h - 6, w, h };
-        if (placed.some((b) => box.x < b.x + b.w + 4 && box.x + box.w + 4 > b.x && box.y < b.y + b.h + 2 && box.y + box.h + 2 > b.y)) continue;
-        placed.push(box);
-        const el = document.createElement("div");
-        el.className = "pointer-events-none select-none whitespace-nowrap rounded-field bg-white/90 px-1.5 py-0.5 text-[11px] font-medium text-carbon tnum shadow-ctrl";
-        el.textContent = text;
-        markersRef.current.push(new maplibregl.Marker({ element: el, anchor: "bottom", offset: [0, -6] }).setLngLat([l.lng, l.lat]).addTo(map));
-      }
     };
-    place();
-    map.on("moveend", place);
-    return () => { map.off("moveend", place); };
-  }, [labels, ready, res]);
+  }, [pins, ready]);
+  useEffect(() => {
+    for (const mk of markersRef.current)
+      mk.el.setAttribute("data-active", String(mk.rank === activeRank));
+  }, [activeRank, pins, ready]);
 
-  // Selection outline.
+  // Selection outline on the hub cell of a solid focus.
+  const selectedCell = focus?.solid ? (focus.cell ?? null) : null;
   const prevSelected = useRef<string | null>(null);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    if (prevSelected.current) map.setFeatureState({ source: "hexes", id: prevSelected.current }, { selected: false });
-    if (selectedCell) map.setFeatureState({ source: "hexes", id: selectedCell }, { selected: true });
+    if (prevSelected.current)
+      map.setFeatureState(
+        { source: "hexes", id: prevSelected.current },
+        { selected: false },
+      );
+    if (selectedCell)
+      map.setFeatureState(
+        { source: "hexes", id: selectedCell },
+        { selected: true },
+      );
     prevSelected.current = selectedCell;
   }, [selectedCell, ready, hexes]);
 
   const fitAll = () => {
     const map = mapRef.current;
     if (!map) return;
-    const cells = [...agg.keys(), ...approxAgg.keys()];
-    if (!cells.length) { map.fitBounds(AMBA_BOUNDS, { padding: 20 }); return; }
     const b = new maplibregl.LngLatBounds();
-    for (const c of cells) { const [lat, lng] = cellToLatLng(c); b.extend([lng, lat]); }
+    for (const c of scores?.keys() ?? []) {
+      const [lat, lng] = cellToLatLng(c);
+      b.extend([lng, lat]);
+    }
+    for (const s of exact)
+      if (s.lat != null && s.lng != null) b.extend([s.lng, s.lat]);
+    if (b.isEmpty()) {
+      map.fitBounds(AMBA_BOUNDS, { padding: 20 });
+      return;
+    }
     map.fitBounds(b, { padding: 40, maxZoom: 12 });
   };
 
   return (
-    <div className="relative h-full w-full" data-testid="map" data-ready={ready ? "1" : "0"} data-hexes={hexes.features.length}>
+    <div
+      className="relative h-full w-full"
+      data-testid="map"
+      data-ready={ready ? "1" : "0"}
+      data-hexes={hexes.features.length}
+    >
       <div ref={containerRef} className="h-full w-full" />
-      <div className="pointer-events-none absolute bottom-6 left-3 z-10 flex flex-col gap-2">
-        {approxSellers.length ? <Legend bins={approxBins} one={metric.one} many={metric.short} res={Math.min(res, APPROX_MAX_RES)} title="Aproximado (centro de localidad)" testId="legend-approx" /> : null}
-        <Legend bins={bins} one={metric.one} many={metric.short} res={res} title={approxSellers.length ? "Por domicilio" : undefined} />
+      <div className="pointer-events-none absolute bottom-6 left-3 z-10">
+        <Legend radiusKm={radiusKm} />
       </div>
-      <button onClick={fitAll} className="btn btn-light t-meta absolute right-3 top-3 z-10 shadow-ctrl" title="Encuadrar todos los datos">
+      <button
+        type="button"
+        onClick={fitAll}
+        className="btn btn-light t-meta absolute right-3 top-3 z-10 shadow-ctrl"
+        title="Encuadrar todos los datos"
+      >
         Ver todo
       </button>
     </div>
   );
-}
-
-/** One label per locality with at least two rows, placed at the mean of its geocoded doors. */
-function localityLabels(sellers: MapSeller[]): { name: string; lat: number; lng: number; count: number }[] {
-  const acc = new Map<string, { lat: number; lng: number; n: number }>();
-  for (const s of sellers) {
-    if (!s.locality || s.lat == null || s.lng == null) continue;
-    const a = acc.get(s.locality) ?? { lat: 0, lng: 0, n: 0 };
-    a.lat += s.lat; a.lng += s.lng; a.n += 1;
-    acc.set(s.locality, a);
-  }
-  return [...acc.entries()]
-    .filter(([, a]) => a.n >= 2)
-    .map(([name, a]) => ({ name, lat: a.lat / a.n, lng: a.lng / a.n, count: a.n }))
-    .sort((x, y) => y.count - x.count)
-    .slice(0, 25);
 }

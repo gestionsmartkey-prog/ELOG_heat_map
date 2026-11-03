@@ -1,0 +1,31 @@
+import type { MapSeller } from "../../src/lib/types";
+
+export const mk = (
+  id: string,
+  vol: number | null,
+  over: Partial<MapSeller> = {},
+): MapSeller => ({
+  id,
+  external_id: id,
+  kind: "seller",
+  kind_label: "Seller",
+  counts_as_seller: true,
+  name: `S${id}`,
+  source: "ml_publico",
+  opening_hours: null,
+  note_address: null,
+  location_id: `L${id}`,
+  address_display: null,
+  locality: "Morón",
+  partido: "Morón",
+  province: "Buenos Aires",
+  postal_code: null,
+  lat: -34.65,
+  lng: -58.62,
+  h3_r9: null,
+  geocode_status: "ok",
+  precision: "locality",
+  attrs: {},
+  metrics: vol == null ? {} : { shipments_month: vol },
+  ...over,
+});
